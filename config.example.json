@@ -1,0 +1,11 @@
+{
+  "base_url": "https://tumourclassification.iarc.who.int",
+  "db_path": "bluebooks.db",
+  "auth_state_path": "auth_state.json",
+  "headless": true,
+  "capture_images": true,
+  "login_wait_seconds": 120,
+  "nav_timeout_ms": 30000,
+  "polite_delay_seconds": 1.0,
+  "keepalive_seconds": 240
+}

@@ -1,0 +1,9 @@
+# Local-only enrichment and notebook generation; no browser dependency.
+pandas>=1.5
+openpyxl>=3.1
+nbformat>=5.0
+sqlalchemy
+matplotlib
+ipython
+# Optional SQL Server mirroring (also needs Microsoft ODBC Driver 17/18).
+pyodbc>=4.0

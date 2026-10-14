@@ -1,0 +1,39 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Jupyter/IPython caches
+.ipynb_checkpoints/
+
+# Local auth/session and machine config
+auth_state.json
+config.json
+
+# Local SQLite runtime/database artifacts
+bluebooks.db
+bluebooks.db-shm
+bluebooks.db-wal
+
+# Local databases, backups, and database sidecars
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.bak
+*.bak_*
+*.db.bak*
+*.bacpac
+
+# Local reference corpora and historical files
+/Library/
+/Archive/
+
+# Local packaging/install artifacts
+*.zip
+*.msix
+local_backups/
+*.local-build.json
+local-validation.json
+local-backfill-backups.json
+local-body-refresh.log
+local-body-validation.log

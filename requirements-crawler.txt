@@ -1,0 +1,5 @@
+playwright==1.45.0
+pandas>=2.0
+pyodbc>=5.0
+# Standard library covers: sqlite3, json, argparse, re, time, datetime, urllib
+# After install, fetch the browser once:  python -m playwright install chromium
