@@ -269,8 +269,9 @@ def main():
             "terms. `source_code` and `suggested_code` remain separate. All views exist in both engines. "
             "Filter edition in the JOIN or allow NULL edition if uncoded terms must remain visible.", "",
             "### Page code-term view (version 10)", "",
-            "`v_page_code_terms` exists in both databases. Its `book_version` comes from the "
-            "editable `books.alias` value (for example `GI, v5`); it also shows chapter, "
+            "`v_page_code_terms` exists in both databases. Its `alias` comes from the "
+            "editable `books.alias` value (for example `GI, v5`); `book_name` retains "
+            "the full `books.title`, and `edition` retains the original `books.edition` name. It also shows chapter, "
             "`ch_order`, page title/URL, `page_sections`, scalar `TermUS` and "
             "`candidateTermUS`, `code_edition`, `ICDO32`, `ICDO4` and `morphology_code`. "
             "`TermNormUS` is the normalized match key for `TermUS` "

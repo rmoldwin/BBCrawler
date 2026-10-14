@@ -404,7 +404,7 @@ site_text AS (
         MIN(confidence_score) AS site_confidence_min,MAX(confidence_score) AS site_confidence_max
  FROM site_rows GROUP BY page_id
 )
-SELECT {book_label} AS book_version,b.book_id,b.edition AS book_edition,k.page_id,
+SELECT {book_label} AS alias,b.title AS book_name,b.book_id,b.edition,k.page_id,
        COALESCE(ch.title,ep.chapter) AS chapter,ch.ord AS ch_order,
        pg.title AS page_title,pg.url AS page_url,
        s.page_sections,k.TermUS,k.TermNormUS,candidate.candidateTermUS,k.edition AS code_edition,

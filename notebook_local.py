@@ -113,7 +113,7 @@ Acceptable/Not recommended labels are separated from their term lists, while
 cross-references and explanatory prose are not stored as terms. Full refresh
 re-extracts these rows from saved page HTML.
 
-Schema version 10 adds `v_page_code_terms`: short book/version, chapter, page
+Schema version 10 adds `v_page_code_terms`: short book/version, full `book_name`, chapter, page
 title/URL, relevant sections, scalar TermUS/TermNormUS/candidateTermUS and ICDO32/ICDO4,
 source/candidate kinds, subtype/qualifier/match/review metadata and conditions.
 Each page/edition/code/TermUS pair occurs once; different terms sharing a code
@@ -190,7 +190,7 @@ with closing(local.connect_sqlite(local.CRAWLER / "bluebooks.db", readonly=True)
     ).fetchall()
     print("Recovered terms and all candidate matches:", recovery_rows[:30])
     page_code_terms = recovery_db.execute(
-        "SELECT book_version,chapter,page_title,page_url,page_sections,TermUS,"
+        "SELECT alias,book_name,edition,chapter,page_title,page_url,page_sections,TermUS,"
                 "TermNormUS,candidateTermUS,ICDO32,ICDO4,is_subtype AS deprecated_is_subtype,code_kind,source_kind,"
         "suggested_qualifier,match_type,candidate_topography_codes "
         "FROM v_page_code_terms ORDER BY page_id,TermUS,code_edition,morphology_code LIMIT 30"

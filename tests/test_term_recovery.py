@@ -147,7 +147,7 @@ class TermRecoveryTests(unittest.TestCase):
             self.con.execute("INSERT INTO page_site_hints(page_id,c_code,provenance,confidence_score)"
                              " VALUES(1,?,'test',?)", (code, confidence))
         rows = self.con.execute(
-            "SELECT book_version,TermUS,candidateTermUS,ICDO32,ICDO4,page_sections,is_subtype,"
+            "SELECT alias,TermUS,candidateTermUS,ICDO32,ICDO4,page_sections,is_subtype,"
             "code_kind,source_kind,suggested_qualifier,match_type,conditions,"
             "candidate_topography_codes,site_confidence_min FROM v_page_code_terms "
             "ORDER BY TermUS,ICDO4"
@@ -174,15 +174,18 @@ class TermRecoveryTests(unittest.TestCase):
         recovery.ensure_sqlite_views(self.con)
         self.assertEqual(self.con.execute("SELECT COUNT(*) FROM v_page_code_terms").fetchone()[0], 3)
         view_columns = [row[1] for row in self.con.execute("PRAGMA table_info(v_page_code_terms)")]
+        self.assertIn("book_name", view_columns)
+        self.assertIn("alias", view_columns)
+        self.assertIn("edition", view_columns)
         self.assertIn("ch_order", view_columns)
         self.assertEqual(
-            self.con.execute("SELECT DISTINCT book_version FROM v_page_code_terms").fetchall(),
+            self.con.execute("SELECT DISTINCT alias FROM v_page_code_terms").fetchall(),
             [("GI, v6",)],
         )
         self.con.execute("UPDATE books SET alias='Custom GI label' WHERE book_id=1")
         recovery.ensure_sqlite_views(self.con)
         self.assertEqual(
-            self.con.execute("SELECT DISTINCT book_version FROM v_page_code_terms").fetchall(),
+            self.con.execute("SELECT DISTINCT alias FROM v_page_code_terms").fetchall(),
             [("Custom GI label",)],
         )
         from term_hygiene import term_keys

@@ -69,7 +69,7 @@ The superseded 2026-10-06 assessment and proposed plan are preserved in
 ### Distinct page code-term output
 
 Schema version 10 provides `v_page_code_terms` in SQLite and `dbo.v_page_code_terms`
-in SQL Server: the editable `books.alias` book/version, chapter and `ch_order`,
+in SQL Server: editable `alias`, original `edition` (neither renamed), full `book_name` from `books.title`, chapter and `ch_order`,
 page title/URL, relevant sections,
 TermUS, TermNormUS (the `Clean2` match key from the indexed source `TermNormUS`
 columns), candidateTermUS, ICDO32/ICDO4 and coding/review metadata. Each
