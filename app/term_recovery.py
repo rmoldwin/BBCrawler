@@ -10,7 +10,9 @@ import sqlite3
 
 from term_hygiene import clean_term_ending, term_keys
 
-MANIFEST = Path(__file__).parent / "Library" / "recovered_terms.json"
+from project_paths import ROOT
+
+MANIFEST = ROOT / "Library" / "recovered_terms.json"
 TABLES = ("entity_term_provenance", "entity_term_code_matches")
 REVIEW_STATUSES = {"proposed", "approved", "rejected", "needs_review"}
 QUALIFIERS = {"synonym", "related", "subtype", "grouper", "other"}

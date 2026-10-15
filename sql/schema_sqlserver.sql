@@ -1,6 +1,5 @@
--- Generated complete data schema; agent activity and crawl history are excluded.
--- For upgrades use bluebooks_local.ensure_server_schema against the canonical SQLite schema.
--- Full-text setup is performed by bluebooks_local.server_search (awaits readiness).
+-- Generated managed data schema; activity and collection history excluded.
+-- For upgrades use bluebooks_local.ensure_server_schema.
 
 IF OBJECT_ID('dbo.books','U') IS NULL
 CREATE TABLE dbo.[books] (
@@ -14,7 +13,6 @@ CREATE TABLE dbo.[books] (
   PRIMARY KEY ([book_id])
 );
 GO
-
 IF OBJECT_ID('dbo.chapters','U') IS NULL
 CREATE TABLE dbo.[chapters] (
   [chapter_id] INT NOT NULL,
@@ -25,7 +23,6 @@ CREATE TABLE dbo.[chapters] (
   PRIMARY KEY ([chapter_id])
 );
 GO
-
 IF OBJECT_ID('dbo.page_groups','U') IS NULL
 CREATE TABLE dbo.[page_groups] (
   [group_id] INT NOT NULL,
@@ -37,7 +34,6 @@ CREATE TABLE dbo.[page_groups] (
   PRIMARY KEY ([group_id])
 );
 GO
-
 IF OBJECT_ID('dbo.pages','U') IS NULL
 CREATE TABLE dbo.[pages] (
   [page_id] INT NOT NULL,
@@ -61,7 +57,6 @@ CREATE TABLE dbo.[pages] (
   PRIMARY KEY ([page_id])
 );
 GO
-
 IF OBJECT_ID('dbo.sections','U') IS NULL
 CREATE TABLE dbo.[sections] (
   [section_id] INT NOT NULL,
@@ -73,7 +68,6 @@ CREATE TABLE dbo.[sections] (
   PRIMARY KEY ([section_id])
 );
 GO
-
 IF OBJECT_ID('dbo.authors','U') IS NULL
 CREATE TABLE dbo.[authors] (
   [author_id] INT NOT NULL,
@@ -83,7 +77,6 @@ CREATE TABLE dbo.[authors] (
   PRIMARY KEY ([author_id])
 );
 GO
-
 IF OBJECT_ID('dbo.images','U') IS NULL
 CREATE TABLE dbo.[images] (
   [image_id] INT NOT NULL,
@@ -98,7 +91,6 @@ CREATE TABLE dbo.[images] (
   PRIMARY KEY ([image_id])
 );
 GO
-
 IF OBJECT_ID('dbo.page_links','U') IS NULL
 CREATE TABLE dbo.[page_links] (
   [link_id] INT NOT NULL,
@@ -109,7 +101,6 @@ CREATE TABLE dbo.[page_links] (
   PRIMARY KEY ([link_id])
 );
 GO
-
 IF OBJECT_ID('dbo.references','U') IS NULL
 CREATE TABLE dbo.[references] (
   [ref_id] INT NOT NULL,
@@ -121,7 +112,6 @@ CREATE TABLE dbo.[references] (
   PRIMARY KEY ([ref_id])
 );
 GO
-
 IF OBJECT_ID('dbo.entity_pages','U') IS NULL
 CREATE TABLE dbo.[entity_pages] (
   [page_id] INT NOT NULL,
@@ -135,7 +125,6 @@ CREATE TABLE dbo.[entity_pages] (
   PRIMARY KEY ([page_id])
 );
 GO
-
 IF OBJECT_ID('dbo.entity_codes','U') IS NULL
 CREATE TABLE dbo.[entity_codes] (
   [entity_code_id] INT NOT NULL,
@@ -150,7 +139,6 @@ CREATE TABLE dbo.[entity_codes] (
   PRIMARY KEY ([entity_code_id])
 );
 GO
-
 IF OBJECT_ID('dbo.entity_related_terms','U') IS NULL
 CREATE TABLE dbo.[entity_related_terms] (
   [related_term_id] INT NOT NULL,
@@ -163,7 +151,6 @@ CREATE TABLE dbo.[entity_related_terms] (
   PRIMARY KEY ([related_term_id])
 );
 GO
-
 IF OBJECT_ID('dbo.entity_term_provenance','U') IS NULL
 CREATE TABLE dbo.[entity_term_provenance] (
   [provenance_id] INT NOT NULL,
@@ -187,7 +174,6 @@ CREATE TABLE dbo.[entity_term_provenance] (
   PRIMARY KEY ([provenance_id])
 );
 GO
-
 IF OBJECT_ID('dbo.entity_term_code_matches','U') IS NULL
 CREATE TABLE dbo.[entity_term_code_matches] (
   [match_id] INT NOT NULL,
@@ -210,7 +196,6 @@ CREATE TABLE dbo.[entity_term_code_matches] (
   PRIMARY KEY ([match_id])
 );
 GO
-
 IF OBJECT_ID('dbo.entity_identifiers','U') IS NULL
 CREATE TABLE dbo.[entity_identifiers] (
   [identifier_id] INT NOT NULL,
@@ -224,7 +209,6 @@ CREATE TABLE dbo.[entity_identifiers] (
   PRIMARY KEY ([identifier_id])
 );
 GO
-
 IF OBJECT_ID('dbo.cpc_curation','U') IS NULL
 CREATE TABLE dbo.[cpc_curation] (
   [curation_id] INT NOT NULL,
@@ -238,7 +222,6 @@ CREATE TABLE dbo.[cpc_curation] (
   PRIMARY KEY ([curation_id])
 );
 GO
-
 IF OBJECT_ID('dbo.icdo4_morphology','U') IS NULL
 CREATE TABLE dbo.[icdo4_morphology] (
   [row_id] INT NOT NULL,
@@ -251,7 +234,6 @@ CREATE TABLE dbo.[icdo4_morphology] (
   PRIMARY KEY ([row_id])
 );
 GO
-
 IF OBJECT_ID('dbo.cpc_morph_codes','U') IS NULL
 CREATE TABLE dbo.[cpc_morph_codes] (
   [row_id] INT NOT NULL,
@@ -266,7 +248,6 @@ CREATE TABLE dbo.[cpc_morph_codes] (
   PRIMARY KEY ([row_id])
 );
 GO
-
 IF OBJECT_ID('dbo.icdo_site_specific_terms','U') IS NULL
 CREATE TABLE dbo.[icdo_site_specific_terms] (
   [term_id] INT NOT NULL,
@@ -290,7 +271,6 @@ CREATE TABLE dbo.[icdo_site_specific_terms] (
   PRIMARY KEY ([term_id])
 );
 GO
-
 IF OBJECT_ID('dbo.icdo_site_specific_term_sites','U') IS NULL
 CREATE TABLE dbo.[icdo_site_specific_term_sites] (
   [term_id] INT NOT NULL,
@@ -299,7 +279,6 @@ CREATE TABLE dbo.[icdo_site_specific_term_sites] (
   PRIMARY KEY ([term_id],[c_code])
 );
 GO
-
 IF OBJECT_ID('dbo.page_icdo_codes','U') IS NULL
 CREATE TABLE dbo.[page_icdo_codes] (
   [code_id] INT NOT NULL,
@@ -316,7 +295,6 @@ CREATE TABLE dbo.[page_icdo_codes] (
   PRIMARY KEY ([code_id])
 );
 GO
-
 IF OBJECT_ID('dbo.page_term_mentions','U') IS NULL
 CREATE TABLE dbo.[page_term_mentions] (
   [mention_id] INT NOT NULL,
@@ -356,7 +334,6 @@ CREATE TABLE dbo.[page_term_mentions] (
   PRIMARY KEY ([mention_id])
 );
 GO
-
 IF OBJECT_ID('dbo.term_saved_sections','U') IS NULL
 CREATE TABLE dbo.[term_saved_sections] (
   [page_id] INT NOT NULL,
@@ -366,7 +343,6 @@ CREATE TABLE dbo.[term_saved_sections] (
   PRIMARY KEY ([page_id])
 );
 GO
-
 IF OBJECT_ID('dbo.term_reference_rows','U') IS NULL
 CREATE TABLE dbo.[term_reference_rows] (
   [reference_key] NVARCHAR(64) NOT NULL,
@@ -384,7 +360,6 @@ CREATE TABLE dbo.[term_reference_rows] (
   PRIMARY KEY ([reference_key])
 );
 GO
-
 IF OBJECT_ID('dbo.term_lookup_evaluations','U') IS NULL
 CREATE TABLE dbo.[term_lookup_evaluations] (
   [evaluation_id] INT NOT NULL,
@@ -401,7 +376,6 @@ CREATE TABLE dbo.[term_lookup_evaluations] (
   PRIMARY KEY ([evaluation_id])
 );
 GO
-
 IF OBJECT_ID('dbo.term_code_candidates','U') IS NULL
 CREATE TABLE dbo.[term_code_candidates] (
   [candidate_id] INT NOT NULL,
@@ -421,7 +395,6 @@ CREATE TABLE dbo.[term_code_candidates] (
   PRIMARY KEY ([candidate_id])
 );
 GO
-
 IF OBJECT_ID('dbo.term_review_decisions','U') IS NULL
 CREATE TABLE dbo.[term_review_decisions] (
   [decision_id] INT NOT NULL,
@@ -436,7 +409,6 @@ CREATE TABLE dbo.[term_review_decisions] (
   PRIMARY KEY ([decision_id])
 );
 GO
-
 IF OBJECT_ID('dbo.term_pipeline_migrations','U') IS NULL
 CREATE TABLE dbo.[term_pipeline_migrations] (
   [migration_key] NVARCHAR(100) NOT NULL,
@@ -445,7 +417,6 @@ CREATE TABLE dbo.[term_pipeline_migrations] (
   PRIMARY KEY ([migration_key])
 );
 GO
-
 IF OBJECT_ID('dbo.page_site_hints','U') IS NULL
 CREATE TABLE dbo.[page_site_hints] (
   [hint_id] INT NOT NULL,
@@ -456,7 +427,6 @@ CREATE TABLE dbo.[page_site_hints] (
   PRIMARY KEY ([hint_id])
 );
 GO
-
 IF OBJECT_ID('dbo.page_entity_evidence','U') IS NULL
 CREATE TABLE dbo.[page_entity_evidence] (
   [evidence_id] INT NOT NULL,
@@ -474,7 +444,6 @@ CREATE TABLE dbo.[page_entity_evidence] (
   PRIMARY KEY ([evidence_id])
 );
 GO
-
 IF OBJECT_ID('dbo.page_search_documents','U') IS NULL
 CREATE TABLE dbo.[page_search_documents] (
   [page_id] INT NOT NULL,
@@ -484,7 +453,6 @@ CREATE TABLE dbo.[page_search_documents] (
   PRIMARY KEY ([page_id])
 );
 GO
-
 IF OBJECT_ID('dbo.enum_values','U') IS NULL
 CREATE TABLE dbo.[enum_values] (
   [enum_group] NVARCHAR(60) NOT NULL,
@@ -494,7 +462,6 @@ CREATE TABLE dbo.[enum_values] (
   PRIMARY KEY ([enum_group],[enum_value])
 );
 GO
-
 IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.chapters') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='book_id'))
 CREATE INDEX [ix_chapters_book] ON dbo.[chapters] ([book_id]);
 GO
@@ -825,16 +792,11 @@ GO
 IF NOT EXISTS(SELECT 1 FROM sys.foreign_key_columns WHERE parent_object_id=OBJECT_ID('dbo.page_search_documents') AND referenced_object_id=OBJECT_ID('dbo.pages') AND COL_NAME(parent_object_id,parent_column_id)='page_id' AND COL_NAME(referenced_object_id,referenced_column_id)='page_id')
 ALTER TABLE dbo.[page_search_documents] WITH CHECK ADD CONSTRAINT [fk_local_page_search_documents_page_id_pages] FOREIGN KEY ([page_id]) REFERENCES dbo.[pages] ([page_id]);
 GO
--- Reviewed duplicate-index cleanup and validation constraints are applied
--- by ensure_server_schema; deploy dbo.Clean from 00_dbo_Clean.sql.
 CREATE OR ALTER VIEW dbo.v_search AS
 SELECT s.section_id,s.page_id,s.heading,s.body_text,p.title,p.page_type,p.url,p.book_id,
-       b.title AS book_title,b.edition
-FROM dbo.sections s JOIN dbo.pages p ON p.page_id=s.page_id
+b.title AS book_title,b.edition FROM dbo.sections s JOIN dbo.pages p ON p.page_id=s.page_id
 JOIN dbo.books b ON b.book_id=p.book_id;
 GO
--- Term functions and write-time maintenance are part of the complete schema.
--- Deploy legacy Clean first; Clean2 uses the maintainer-approved deployed definition.
 /* ===========================================================================
    00_dbo_Clean.sql
 
@@ -3181,7 +3143,7 @@ UNION ALL
 SELECT 'page_term_mentions',m.mention_id,m.page_id,m.term_original,m.TermUS,m.TermNormUS,
  m.icdo_code,CASE WHEN m.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
  m.term_role,m.term_source FROM dbo.page_term_mentions m WHERE m.is_current=1
- AND NOT EXISTS(SELECT 1 FROM dbo.v_legacy_entity_terms t WHERE t.page_id=m.page_id AND t.TermUS=m.TermUS)
+ AND NOT EXISTS(SELECT 1 FROM dbo.v_legacy_entity_terms t WHERE t.page_id=m.page_id AND t.TermUS COLLATE Latin1_General_100_BIN2=m.TermUS COLLATE Latin1_General_100_BIN2)
 
 GO
 
@@ -3204,8 +3166,8 @@ SELECT 'page_term_mentions' AS term_table,m.mention_id AS term_id,m.page_id,
  e.edition,c.code AS suggested_code,c.candidateTermUS AS official_term,
  c.candidateTermUS,c.candidateTermNormUS,c.official_term AS official_term_source,
  c.match_type,c.candidate_order,c.conditions,c.review_status,
- CAST(NULL AS VARCHAR(600)) AS reference_file,CAST(NULL AS VARCHAR(100)) AS reference_sheet,
- CAST(NULL AS INT) AS reference_row,e.reference_sha256,c.reference_evidence AS code_term_evidence,
+ COALESCE(JSON_VALUE(c.reference_evidence,'$[0].file'),JSON_VALUE(c.reference_evidence,'$.file'),JSON_VALUE(c.reference_evidence,'$.support[0].file')) AS reference_file,COALESCE(JSON_VALUE(c.reference_evidence,'$[0].sheet'),JSON_VALUE(c.reference_evidence,'$.sheet'),JSON_VALUE(c.reference_evidence,'$.support[0].sheet')) AS reference_sheet,
+ TRY_CONVERT(INT,COALESCE(JSON_VALUE(c.reference_evidence,'$[0].row'),JSON_VALUE(c.reference_evidence,'$.row'),JSON_VALUE(c.reference_evidence,'$.support[0].row'))) AS reference_row,e.reference_sha256,c.reference_evidence AS code_term_evidence,
  e.outcome,e.is_current,m.observation_key,c.candidate_key
 FROM dbo.page_term_mentions m
 JOIN dbo.term_lookup_evaluations e ON e.mention_id=m.mention_id
@@ -3226,7 +3188,26 @@ LEFT JOIN dbo.term_code_candidates c ON c.evaluation_id=e.evaluation_id
 GO
 
 CREATE OR ALTER VIEW dbo.v_page_code_terms AS
-WITH raw AS (
+WITH evaluation_outcomes AS (
+ SELECT m.page_id,m.TermUS COLLATE Latin1_General_100_BIN2 AS TermUS,e.edition,
+ MAX(e.outcome COLLATE Latin1_General_100_BIN2) AS outcome
+ FROM dbo.page_term_mentions m
+ JOIN dbo.term_lookup_evaluations e ON e.mention_id=m.mention_id AND e.is_current=1
+ GROUP BY m.page_id,m.TermUS COLLATE Latin1_General_100_BIN2,e.edition
+),
+candidate_keys AS (
+ SELECT DISTINCT m.page_id,m.TermUS COLLATE Latin1_General_100_BIN2 AS TermUS,c.code
+ FROM dbo.page_term_mentions m
+ JOIN dbo.term_lookup_evaluations e ON e.mention_id=m.mention_id AND e.is_current=1
+ JOIN dbo.term_code_candidates c ON c.evaluation_id=e.evaluation_id
+ WHERE c.review_status<>'rejected'
+),
+source_keys AS (
+ SELECT page_id,TermUS COLLATE Latin1_General_100_BIN2 AS TermUS,code FROM dbo.entity_codes
+ UNION
+ SELECT page_id,TermUS COLLATE Latin1_General_100_BIN2,COALESCE(icdo_code_raw,icdo_code) FROM dbo.page_icdo_codes
+),
+raw AS (
  SELECT c.page_id,c.TermUS COLLATE Latin1_General_100_BIN2 AS TermUS,c.TermNormUS,
  CASE WHEN LEN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END AS code_edition,
  c.code,NULL AS candidateTermUS,0 AS is_proposed_code,0 AS is_proposed_term,
@@ -3234,36 +3215,31 @@ WITH raw AS (
  c.term_role,CAST(c.is_subtype AS INT) AS is_subtype,
  'coding_section' AS term_source,'entity_codes' AS source_tables,
  'ICD-O coding' AS page_sections,'coding' AS terminology_kind,
- COALESCE((SELECT MAX(e.outcome) FROM dbo.term_lookup_evaluations e
- JOIN dbo.page_term_mentions m ON m.mention_id=e.mention_id
- WHERE m.page_id=c.page_id AND m.TermUS COLLATE Latin1_General_100_BIN2=c.TermUS COLLATE Latin1_General_100_BIN2 AND e.is_current=1
- AND e.edition=CASE WHEN LEN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END),
- 'not_evaluated') AS lookup_outcome,NULL AS match_type,NULL AS conditions,NULL AS review_status
- FROM dbo.entity_codes c WHERE c.code IS NOT NULL AND TRIM(c.code)<>''
- AND NOT EXISTS(SELECT 1 FROM dbo.v_term_candidate_evidence v WHERE v.page_id=c.page_id
- AND v.TermUS COLLATE Latin1_General_100_BIN2=c.TermUS COLLATE Latin1_General_100_BIN2 AND v.code=c.code AND v.is_current=1 AND v.review_status<>'rejected')
+ COALESCE(o.outcome,'not_evaluated') AS lookup_outcome,
+ NULL AS match_type,NULL AS conditions,NULL AS review_status
+ FROM dbo.entity_codes c
+ LEFT JOIN evaluation_outcomes o ON o.page_id=c.page_id AND o.TermUS=c.TermUS COLLATE Latin1_General_100_BIN2
+ AND o.edition=CASE WHEN LEN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END
+ LEFT JOIN candidate_keys k ON k.page_id=c.page_id AND k.TermUS=c.TermUS COLLATE Latin1_General_100_BIN2 AND k.code=c.code
+ WHERE c.code IS NOT NULL AND TRIM(c.code)<>'' AND k.code IS NULL
  UNION ALL
  SELECT p.page_id,p.TermUS,p.TermNormUS,
  CASE WHEN LEN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END,
  COALESCE(p.icdo_code_raw,p.icdo_code),NULL,0,0,'contextual_code','source',
  p.term_role,CASE WHEN p.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
  p.term_source,'page_icdo_codes',p.section_heading,'coding',
- COALESCE((SELECT MAX(e.outcome) FROM dbo.term_lookup_evaluations e
- JOIN dbo.page_term_mentions m ON m.mention_id=e.mention_id
- WHERE m.page_id=p.page_id AND m.TermUS COLLATE Latin1_General_100_BIN2=p.TermUS COLLATE Latin1_General_100_BIN2 AND e.is_current=1
- AND e.edition=CASE WHEN LEN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END),
- 'not_evaluated'),NULL,NULL,NULL
- FROM dbo.page_icdo_codes p WHERE COALESCE(p.icdo_code_raw,p.icdo_code) IS NOT NULL
+ COALESCE(o.outcome,'not_evaluated'),NULL,NULL,NULL
+ FROM dbo.page_icdo_codes p
+ LEFT JOIN evaluation_outcomes o ON o.page_id=p.page_id AND o.TermUS=p.TermUS COLLATE Latin1_General_100_BIN2
+ AND o.edition=CASE WHEN LEN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END
+ LEFT JOIN candidate_keys k ON k.page_id=p.page_id AND k.TermUS=p.TermUS COLLATE Latin1_General_100_BIN2
+ AND k.code=COALESCE(p.icdo_code_raw,p.icdo_code)
+ WHERE COALESCE(p.icdo_code_raw,p.icdo_code) IS NOT NULL
  AND p.TermUS IS NOT NULL
- AND NOT EXISTS(SELECT 1 FROM dbo.v_term_candidate_evidence v WHERE v.page_id=p.page_id
- AND v.TermUS COLLATE Latin1_General_100_BIN2=p.TermUS COLLATE Latin1_General_100_BIN2 AND v.code=COALESCE(p.icdo_code_raw,p.icdo_code)
- AND v.is_current=1 AND v.review_status<>'rejected')
+ AND k.code IS NULL
  UNION ALL
  SELECT m.page_id,m.TermUS,m.TermNormUS,e.edition,c.code,c.candidateTermUS COLLATE Latin1_General_100_BIN2,
- CASE WHEN c.code IS NOT NULL AND NOT EXISTS(
- SELECT 1 FROM dbo.entity_codes s WHERE s.page_id=m.page_id AND s.TermUS COLLATE Latin1_General_100_BIN2=m.TermUS COLLATE Latin1_General_100_BIN2 AND s.code=c.code)
- AND NOT EXISTS(SELECT 1 FROM dbo.page_icdo_codes s WHERE s.page_id=m.page_id
- AND s.TermUS COLLATE Latin1_General_100_BIN2=m.TermUS COLLATE Latin1_General_100_BIN2 AND COALESCE(s.icdo_code_raw,s.icdo_code)=c.code) THEN 1 ELSE 0 END,
+ CASE WHEN c.code IS NOT NULL AND s.code IS NULL THEN 1 ELSE 0 END,
  CASE WHEN c.candidateTermUS IS NOT NULL AND c.candidateTermUS COLLATE Latin1_General_100_BIN2<>m.TermUS COLLATE Latin1_General_100_BIN2 THEN 1 ELSE 0 END,
  CASE WHEN c.code IS NULL THEN 'uncoded_term' ELSE 'candidate' END,m.term_origin,
  m.term_role,CASE WHEN m.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
@@ -3276,23 +3252,111 @@ WITH raw AS (
  FROM dbo.page_term_mentions m JOIN dbo.term_lookup_evaluations e
  ON e.mention_id=m.mention_id AND e.is_current=1
  LEFT JOIN dbo.term_code_candidates c ON c.evaluation_id=e.evaluation_id AND c.review_status<>'rejected'
+ LEFT JOIN source_keys s ON s.page_id=m.page_id AND s.TermUS=m.TermUS COLLATE Latin1_General_100_BIN2 AND s.code=c.code
  WHERE m.is_current=1 AND m.review_status<>'rejected'
 ),
 grain AS (
- SELECT page_id,TermUS,MAX(TermNormUS) AS TermNormUS,code_edition,code,candidateTermUS,
+ SELECT page_id,TermUS,TermNormUS,code_edition,code,candidateTermUS,
  MAX(is_proposed_code) AS is_proposed_code,MAX(is_proposed_term) AS is_proposed_term,
- MAX(term_role) AS term_role,MAX(is_subtype) AS is_subtype,
- MAX(term_source) AS term_source,MAX(source_tables) AS source_tables,
- MAX(page_sections) AS page_sections,MAX(terminology_kind) AS terminology_kind,
- MAX(lookup_outcome) AS lookup_outcome,MAX(match_type) AS match_type,
- MAX(conditions) AS conditions,MAX(review_status) AS review_status,
+ MAX(term_role COLLATE Latin1_General_100_BIN2) AS term_role,MAX(is_subtype) AS is_subtype,
+ MAX(term_source COLLATE Latin1_General_100_BIN2) AS term_source,MAX(source_tables COLLATE Latin1_General_100_BIN2) AS source_tables,
+ MAX(page_sections COLLATE Latin1_General_100_BIN2) AS page_sections,MAX(terminology_kind COLLATE Latin1_General_100_BIN2) AS terminology_kind,
+ MAX(lookup_outcome COLLATE Latin1_General_100_BIN2) AS lookup_outcome,MAX(match_type COLLATE Latin1_General_100_BIN2) AS match_type,
+ MAX(conditions COLLATE Latin1_General_100_BIN2) AS conditions,MAX(review_status COLLATE Latin1_General_100_BIN2) AS review_status,
  MAX(CASE WHEN code_kind IN ('source_assignment','contextual_code')
  OR (code IS NOT NULL AND is_proposed_code=0) THEN 1 ELSE 0 END) AS has_source,
  MAX(CASE WHEN code_kind='candidate' THEN 1 ELSE 0 END) AS has_candidate,
- MAX(source_kind) AS source_kind,
+ MAX(source_kind COLLATE Latin1_General_100_BIN2) AS source_kind,
  MAX(CASE WHEN source_kind='source' THEN 1 ELSE 0 END) AS has_source_observation,
  MAX(CASE WHEN source_kind='legacy_import' THEN 1 ELSE 0 END) AS has_legacy_observation
- FROM raw GROUP BY page_id,TermUS,code_edition,code,candidateTermUS
+ FROM raw GROUP BY page_id,TermUS,TermNormUS,code_edition,code,candidateTermUS
+),
+ranked AS (
+ SELECT grain.*,MAX(CASE WHEN code IS NOT NULL THEN 1 ELSE 0 END)
+ OVER (PARTITION BY page_id,TermUS,TermNormUS,code_edition) AS has_code
+ FROM grain
+),
+edition32 AS (
+ SELECT * FROM ranked WHERE code_edition='ICD-O-3.2' AND (code IS NOT NULL OR has_code=0)
+),
+edition4 AS (
+ SELECT * FROM ranked WHERE code_edition='ICD-O-4' AND (code IS NOT NULL OR has_code=0)
+),
+paired AS (
+ SELECT a.page_id,a.TermUS,a.TermNormUS,
+ a.code AS ICDO32,z.code AS ICDO4,
+ COALESCE(z.candidateTermUS,a.candidateTermUS) AS candidateTermUS,
+ CASE WHEN a.term_role IS NULL THEN z.term_role WHEN z.term_role IS NULL OR a.term_role COLLATE Latin1_General_100_BIN2=z.term_role COLLATE Latin1_General_100_BIN2 THEN a.term_role WHEN a.term_role COLLATE Latin1_General_100_BIN2<z.term_role COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.term_role,N'; ',z.term_role) ELSE CONCAT(z.term_role,N'; ',a.term_role) END AS term_role,
+ CASE WHEN a.term_source IS NULL THEN z.term_source WHEN z.term_source IS NULL OR a.term_source COLLATE Latin1_General_100_BIN2=z.term_source COLLATE Latin1_General_100_BIN2 THEN a.term_source WHEN a.term_source COLLATE Latin1_General_100_BIN2<z.term_source COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.term_source,N'; ',z.term_source) ELSE CONCAT(z.term_source,N'; ',a.term_source) END AS term_source,
+ CASE WHEN a.source_tables IS NULL THEN z.source_tables WHEN z.source_tables IS NULL OR a.source_tables COLLATE Latin1_General_100_BIN2=z.source_tables COLLATE Latin1_General_100_BIN2 THEN a.source_tables WHEN a.source_tables COLLATE Latin1_General_100_BIN2<z.source_tables COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.source_tables,N'; ',z.source_tables) ELSE CONCAT(z.source_tables,N'; ',a.source_tables) END AS source_tables,
+ CASE WHEN a.page_sections IS NULL THEN z.page_sections WHEN z.page_sections IS NULL OR a.page_sections COLLATE Latin1_General_100_BIN2=z.page_sections COLLATE Latin1_General_100_BIN2 THEN a.page_sections WHEN a.page_sections COLLATE Latin1_General_100_BIN2<z.page_sections COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.page_sections,N'; ',z.page_sections) ELSE CONCAT(z.page_sections,N'; ',a.page_sections) END AS page_sections,
+ CASE WHEN a.terminology_kind IS NULL THEN z.terminology_kind WHEN z.terminology_kind IS NULL OR a.terminology_kind COLLATE Latin1_General_100_BIN2=z.terminology_kind COLLATE Latin1_General_100_BIN2 THEN a.terminology_kind WHEN a.terminology_kind COLLATE Latin1_General_100_BIN2<z.terminology_kind COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.terminology_kind,N'; ',z.terminology_kind) ELSE CONCAT(z.terminology_kind,N'; ',a.terminology_kind) END AS terminology_kind,
+ CASE WHEN a.lookup_outcome IS NULL THEN z.lookup_outcome WHEN z.lookup_outcome IS NULL OR a.lookup_outcome COLLATE Latin1_General_100_BIN2=z.lookup_outcome COLLATE Latin1_General_100_BIN2 THEN a.lookup_outcome WHEN a.lookup_outcome COLLATE Latin1_General_100_BIN2<z.lookup_outcome COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.lookup_outcome,N'; ',z.lookup_outcome) ELSE CONCAT(z.lookup_outcome,N'; ',a.lookup_outcome) END AS lookup_outcome,
+ CASE WHEN a.match_type IS NULL THEN z.match_type WHEN z.match_type IS NULL OR a.match_type COLLATE Latin1_General_100_BIN2=z.match_type COLLATE Latin1_General_100_BIN2 THEN a.match_type WHEN a.match_type COLLATE Latin1_General_100_BIN2<z.match_type COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.match_type,N'; ',z.match_type) ELSE CONCAT(z.match_type,N'; ',a.match_type) END AS match_type,
+ CASE WHEN a.conditions IS NULL THEN z.conditions WHEN z.conditions IS NULL OR a.conditions COLLATE Latin1_General_100_BIN2=z.conditions COLLATE Latin1_General_100_BIN2 THEN a.conditions WHEN a.conditions COLLATE Latin1_General_100_BIN2<z.conditions COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.conditions,N'; ',z.conditions) ELSE CONCAT(z.conditions,N'; ',a.conditions) END AS conditions,
+ CASE WHEN a.review_status IS NULL THEN z.review_status WHEN z.review_status IS NULL OR a.review_status COLLATE Latin1_General_100_BIN2=z.review_status COLLATE Latin1_General_100_BIN2 THEN a.review_status WHEN a.review_status COLLATE Latin1_General_100_BIN2<z.review_status COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.review_status,N'; ',z.review_status) ELSE CONCAT(z.review_status,N'; ',a.review_status) END AS review_status,
+ CASE WHEN a.source_kind IS NULL THEN z.source_kind WHEN z.source_kind IS NULL OR a.source_kind COLLATE Latin1_General_100_BIN2=z.source_kind COLLATE Latin1_General_100_BIN2 THEN a.source_kind WHEN a.source_kind COLLATE Latin1_General_100_BIN2<z.source_kind COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.source_kind,N'; ',z.source_kind) ELSE CONCAT(z.source_kind,N'; ',a.source_kind) END AS source_kind,
+ CASE WHEN COALESCE(a.is_proposed_code,0)>COALESCE(z.is_proposed_code,0) THEN COALESCE(a.is_proposed_code,0) ELSE COALESCE(z.is_proposed_code,0) END AS is_proposed_code,
+ CASE WHEN COALESCE(a.is_proposed_term,0)>COALESCE(z.is_proposed_term,0) THEN COALESCE(a.is_proposed_term,0) ELSE COALESCE(z.is_proposed_term,0) END AS is_proposed_term,
+ CASE WHEN COALESCE(a.is_subtype,0)>COALESCE(z.is_subtype,0) THEN COALESCE(a.is_subtype,0) ELSE COALESCE(z.is_subtype,0) END AS is_subtype,
+ CASE WHEN COALESCE(a.has_source,0)>COALESCE(z.has_source,0) THEN COALESCE(a.has_source,0) ELSE COALESCE(z.has_source,0) END AS has_source,
+ CASE WHEN COALESCE(a.has_candidate,0)>COALESCE(z.has_candidate,0) THEN COALESCE(a.has_candidate,0) ELSE COALESCE(z.has_candidate,0) END AS has_candidate,
+ CASE WHEN COALESCE(a.has_source_observation,0)>COALESCE(z.has_source_observation,0) THEN COALESCE(a.has_source_observation,0) ELSE COALESCE(z.has_source_observation,0) END AS has_source_observation,
+ CASE WHEN COALESCE(a.has_legacy_observation,0)>COALESCE(z.has_legacy_observation,0) THEN COALESCE(a.has_legacy_observation,0) ELSE COALESCE(z.has_legacy_observation,0) END AS has_legacy_observation,
+ a.candidateTermUS AS candidateTermUS32,
+ a.is_proposed_code AS is_proposed_code32,
+ a.is_proposed_term AS is_proposed_term32,
+ a.lookup_outcome AS lookup_outcome32,
+ a.match_type AS match_type32,
+ a.conditions AS conditions32,
+ a.review_status AS review_status32,
+ z.candidateTermUS AS candidateTermUS4,
+ z.is_proposed_code AS is_proposed_code4,
+ z.is_proposed_term AS is_proposed_term4,
+ z.lookup_outcome AS lookup_outcome4,
+ z.match_type AS match_type4,
+ z.conditions AS conditions4,
+ z.review_status AS review_status4
+ FROM edition32 a LEFT JOIN edition4 z
+ ON z.page_id=a.page_id AND z.TermUS=a.TermUS
+ UNION ALL
+ SELECT z.page_id,z.TermUS,z.TermNormUS,
+ a.code AS ICDO32,z.code AS ICDO4,
+ COALESCE(z.candidateTermUS,a.candidateTermUS) AS candidateTermUS,
+ CASE WHEN a.term_role IS NULL THEN z.term_role WHEN z.term_role IS NULL OR a.term_role COLLATE Latin1_General_100_BIN2=z.term_role COLLATE Latin1_General_100_BIN2 THEN a.term_role WHEN a.term_role COLLATE Latin1_General_100_BIN2<z.term_role COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.term_role,N'; ',z.term_role) ELSE CONCAT(z.term_role,N'; ',a.term_role) END AS term_role,
+ CASE WHEN a.term_source IS NULL THEN z.term_source WHEN z.term_source IS NULL OR a.term_source COLLATE Latin1_General_100_BIN2=z.term_source COLLATE Latin1_General_100_BIN2 THEN a.term_source WHEN a.term_source COLLATE Latin1_General_100_BIN2<z.term_source COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.term_source,N'; ',z.term_source) ELSE CONCAT(z.term_source,N'; ',a.term_source) END AS term_source,
+ CASE WHEN a.source_tables IS NULL THEN z.source_tables WHEN z.source_tables IS NULL OR a.source_tables COLLATE Latin1_General_100_BIN2=z.source_tables COLLATE Latin1_General_100_BIN2 THEN a.source_tables WHEN a.source_tables COLLATE Latin1_General_100_BIN2<z.source_tables COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.source_tables,N'; ',z.source_tables) ELSE CONCAT(z.source_tables,N'; ',a.source_tables) END AS source_tables,
+ CASE WHEN a.page_sections IS NULL THEN z.page_sections WHEN z.page_sections IS NULL OR a.page_sections COLLATE Latin1_General_100_BIN2=z.page_sections COLLATE Latin1_General_100_BIN2 THEN a.page_sections WHEN a.page_sections COLLATE Latin1_General_100_BIN2<z.page_sections COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.page_sections,N'; ',z.page_sections) ELSE CONCAT(z.page_sections,N'; ',a.page_sections) END AS page_sections,
+ CASE WHEN a.terminology_kind IS NULL THEN z.terminology_kind WHEN z.terminology_kind IS NULL OR a.terminology_kind COLLATE Latin1_General_100_BIN2=z.terminology_kind COLLATE Latin1_General_100_BIN2 THEN a.terminology_kind WHEN a.terminology_kind COLLATE Latin1_General_100_BIN2<z.terminology_kind COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.terminology_kind,N'; ',z.terminology_kind) ELSE CONCAT(z.terminology_kind,N'; ',a.terminology_kind) END AS terminology_kind,
+ CASE WHEN a.lookup_outcome IS NULL THEN z.lookup_outcome WHEN z.lookup_outcome IS NULL OR a.lookup_outcome COLLATE Latin1_General_100_BIN2=z.lookup_outcome COLLATE Latin1_General_100_BIN2 THEN a.lookup_outcome WHEN a.lookup_outcome COLLATE Latin1_General_100_BIN2<z.lookup_outcome COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.lookup_outcome,N'; ',z.lookup_outcome) ELSE CONCAT(z.lookup_outcome,N'; ',a.lookup_outcome) END AS lookup_outcome,
+ CASE WHEN a.match_type IS NULL THEN z.match_type WHEN z.match_type IS NULL OR a.match_type COLLATE Latin1_General_100_BIN2=z.match_type COLLATE Latin1_General_100_BIN2 THEN a.match_type WHEN a.match_type COLLATE Latin1_General_100_BIN2<z.match_type COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.match_type,N'; ',z.match_type) ELSE CONCAT(z.match_type,N'; ',a.match_type) END AS match_type,
+ CASE WHEN a.conditions IS NULL THEN z.conditions WHEN z.conditions IS NULL OR a.conditions COLLATE Latin1_General_100_BIN2=z.conditions COLLATE Latin1_General_100_BIN2 THEN a.conditions WHEN a.conditions COLLATE Latin1_General_100_BIN2<z.conditions COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.conditions,N'; ',z.conditions) ELSE CONCAT(z.conditions,N'; ',a.conditions) END AS conditions,
+ CASE WHEN a.review_status IS NULL THEN z.review_status WHEN z.review_status IS NULL OR a.review_status COLLATE Latin1_General_100_BIN2=z.review_status COLLATE Latin1_General_100_BIN2 THEN a.review_status WHEN a.review_status COLLATE Latin1_General_100_BIN2<z.review_status COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.review_status,N'; ',z.review_status) ELSE CONCAT(z.review_status,N'; ',a.review_status) END AS review_status,
+ CASE WHEN a.source_kind IS NULL THEN z.source_kind WHEN z.source_kind IS NULL OR a.source_kind COLLATE Latin1_General_100_BIN2=z.source_kind COLLATE Latin1_General_100_BIN2 THEN a.source_kind WHEN a.source_kind COLLATE Latin1_General_100_BIN2<z.source_kind COLLATE Latin1_General_100_BIN2 THEN CONCAT(a.source_kind,N'; ',z.source_kind) ELSE CONCAT(z.source_kind,N'; ',a.source_kind) END AS source_kind,
+ CASE WHEN COALESCE(a.is_proposed_code,0)>COALESCE(z.is_proposed_code,0) THEN COALESCE(a.is_proposed_code,0) ELSE COALESCE(z.is_proposed_code,0) END AS is_proposed_code,
+ CASE WHEN COALESCE(a.is_proposed_term,0)>COALESCE(z.is_proposed_term,0) THEN COALESCE(a.is_proposed_term,0) ELSE COALESCE(z.is_proposed_term,0) END AS is_proposed_term,
+ CASE WHEN COALESCE(a.is_subtype,0)>COALESCE(z.is_subtype,0) THEN COALESCE(a.is_subtype,0) ELSE COALESCE(z.is_subtype,0) END AS is_subtype,
+ CASE WHEN COALESCE(a.has_source,0)>COALESCE(z.has_source,0) THEN COALESCE(a.has_source,0) ELSE COALESCE(z.has_source,0) END AS has_source,
+ CASE WHEN COALESCE(a.has_candidate,0)>COALESCE(z.has_candidate,0) THEN COALESCE(a.has_candidate,0) ELSE COALESCE(z.has_candidate,0) END AS has_candidate,
+ CASE WHEN COALESCE(a.has_source_observation,0)>COALESCE(z.has_source_observation,0) THEN COALESCE(a.has_source_observation,0) ELSE COALESCE(z.has_source_observation,0) END AS has_source_observation,
+ CASE WHEN COALESCE(a.has_legacy_observation,0)>COALESCE(z.has_legacy_observation,0) THEN COALESCE(a.has_legacy_observation,0) ELSE COALESCE(z.has_legacy_observation,0) END AS has_legacy_observation,
+ a.candidateTermUS AS candidateTermUS32,
+ a.is_proposed_code AS is_proposed_code32,
+ a.is_proposed_term AS is_proposed_term32,
+ a.lookup_outcome AS lookup_outcome32,
+ a.match_type AS match_type32,
+ a.conditions AS conditions32,
+ a.review_status AS review_status32,
+ z.candidateTermUS AS candidateTermUS4,
+ z.is_proposed_code AS is_proposed_code4,
+ z.is_proposed_term AS is_proposed_term4,
+ z.lookup_outcome AS lookup_outcome4,
+ z.match_type AS match_type4,
+ z.conditions AS conditions4,
+ z.review_status AS review_status4
+ FROM edition4 z LEFT JOIN edition32 a
+ ON z.page_id=a.page_id AND z.TermUS=a.TermUS
+ WHERE a.page_id IS NULL
 ),
 site_rows AS (
  SELECT page_id,c_code,MAX(confidence_score) AS confidence_score
@@ -3305,10 +3369,15 @@ site_text AS (
 )
 SELECT b.alias,b.title AS book_name,b.book_id,b.edition,g.page_id,
  COALESCE(ch.title,ep.chapter) AS chapter,ch.ord AS ch_order,p.title AS page_title,p.url AS page_url,
- g.page_sections,g.TermUS,g.TermNormUS,g.candidateTermUS,g.code_edition,
- CASE WHEN g.code_edition='ICD-O-3.2' THEN g.code END AS ICDO32,
- CASE WHEN g.code_edition='ICD-O-4' THEN g.code END AS ICDO4,
- g.code AS morphology_code,g.is_subtype,g.term_role,g.term_source,
+ CASE
+ WHEN g.term_source IN ('coding_section','coding_page') THEN 'ICD-O coding'
+ WHEN g.term_role LIKE '%subtype%' THEN 'Subtype(s)'
+ WHEN g.term_source='related_terminology' THEN 'Related terminology'
+ WHEN g.term_source='page_title' THEN 'Page title'
+ ELSE g.page_sections
+ END AS page_sections,
+ g.TermUS,g.TermNormUS,g.candidateTermUS,g.ICDO32,g.ICDO4,
+ COALESCE(g.ICDO4,g.ICDO32) AS morphology_code,g.is_subtype,g.term_role,g.term_source,
  CASE WHEN g.has_source=1 AND g.has_candidate=1 THEN 'source_assignment; candidate'
  WHEN g.has_source=1 THEN 'source_assignment' WHEN g.has_candidate=1 THEN 'candidate'
  ELSE 'uncoded_term' END AS code_kind,
@@ -3316,8 +3385,11 @@ SELECT b.alias,b.title AS book_name,b.book_id,b.edition,g.page_id,
  ELSE g.source_kind END AS source_kind,
  NULL AS suggested_qualifier,g.match_type,g.terminology_kind,g.conditions,g.review_status,
  g.source_tables,g.is_proposed_code,g.is_proposed_term,g.lookup_outcome,
- sites.candidate_topography_codes,sites.site_confidence_min,sites.site_confidence_max
-FROM grain g JOIN dbo.pages p ON p.page_id=g.page_id
+ sites.candidate_topography_codes,
+ CAST(sites.site_confidence_min AS FLOAT) AS site_confidence_min,
+ CAST(sites.site_confidence_max AS FLOAT) AS site_confidence_max,
+ g.candidateTermUS32,g.is_proposed_code32,g.is_proposed_term32,g.lookup_outcome32,g.match_type32,g.conditions32,g.review_status32,g.candidateTermUS4,g.is_proposed_code4,g.is_proposed_term4,g.lookup_outcome4,g.match_type4,g.conditions4,g.review_status4
+FROM paired g JOIN dbo.pages p ON p.page_id=g.page_id
 JOIN dbo.books b ON b.book_id=p.book_id
 LEFT JOIN dbo.chapters ch ON ch.chapter_id=p.chapter_id
 LEFT JOIN dbo.entity_pages ep ON ep.page_id=g.page_id
@@ -3362,47 +3434,47 @@ IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_
 ALTER TABLE dbo.[entity_term_code_matches] WITH CHECK ADD CONSTRAINT [ck_local_entity_term_code_matches_review] CHECK (review_status IN ('proposed','approved','rejected','needs_review'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_reference_rows') AND name='ck_local_term_reference_rows_edition')
-ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_edition] CHECK (edition IN ('ICD-O-3.2','ICD-O-4'));
+ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_edition] CHECK ([edition] IN ('ICD-O-3.2','ICD-O-4'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_reference_rows') AND name='ck_local_term_reference_rows_reference_row')
-ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_reference_row] CHECK (reference_row>0);
+ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_reference_row] CHECK ([reference_row]>0);
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_reference_rows') AND name='ck_local_term_reference_rows_reference_sha256')
-ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_reference_sha256] CHECK (LEN(reference_sha256)=64);
+ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_reference_sha256] CHECK (LEN([reference_sha256])=64);
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_edition')
-ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_edition] CHECK (edition IN ('ICD-O-3.2','ICD-O-4'));
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_edition] CHECK ([edition] IN ('ICD-O-3.2','ICD-O-4'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_outcome')
-ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_outcome] CHECK (outcome IN ('matched','ambiguous','no_match','not_applicable','needs_review','not_evaluated'));
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_outcome] CHECK ([outcome] IN ('matched','ambiguous','no_match','not_applicable','needs_review','not_evaluated'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_current')
-ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_current] CHECK (is_current IN (0,1));
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_current] CHECK ([is_current] IN (0,1));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_hashes')
-ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_hashes] CHECK (LEN(reference_sha256)=64 AND LEN(evidence_hash)=64);
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_hashes] CHECK (LEN([reference_sha256])=64 AND LEN([evidence_hash])=64);
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_match_type')
-ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_match_type] CHECK (match_type IN ('exact','synonym','normalized','broader','narrower','conditional','legacy_curated'));
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_match_type] CHECK ([match_type] IN ('exact','synonym','normalized','broader','narrower','conditional','legacy_curated'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_evidence_tier')
-ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_evidence_tier] CHECK (evidence_tier IN ('structured','supported_span','interpretation','curated_review'));
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_evidence_tier] CHECK ([evidence_tier] IN ('structured','supported_span','interpretation','curated_review'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_candidate_order')
-ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_candidate_order] CHECK (candidate_order>0);
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_candidate_order] CHECK ([candidate_order]>0);
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_review_status')
-ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_review_status] CHECK (review_status IN ('proposed','approved','rejected','needs_review'));
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_review_status] CHECK ([review_status] IN ('proposed','approved','rejected','needs_review'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_review_decisions') AND name='ck_local_term_review_decisions_scope')
-ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_scope] CHECK (scope IN ('observation','page_context','candidate','term_edition_code','global_extraction'));
+ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_scope] CHECK ([scope] IN ('observation','page_context','candidate','term_edition_code','global_extraction'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_review_decisions') AND name='ck_local_term_review_decisions_outcome')
-ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_outcome] CHECK (outcome IN ('approved','rejected','needs_review','proposed'));
+ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_outcome] CHECK ([outcome] IN ('approved','rejected','needs_review','proposed'));
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_review_decisions') AND name='ck_local_term_review_decisions_evidence_hash')
-ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_evidence_hash] CHECK (LEN(evidence_hash)=64);
+ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_evidence_hash] CHECK (LEN([evidence_hash])=64);
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_pipeline_migrations') AND name='ck_local_term_pipeline_migrations_imported_rows')
-ALTER TABLE dbo.[term_pipeline_migrations] WITH CHECK ADD CONSTRAINT [ck_local_term_pipeline_migrations_imported_rows] CHECK (imported_rows>=0);
+ALTER TABLE dbo.[term_pipeline_migrations] WITH CHECK ADD CONSTRAINT [ck_local_term_pipeline_migrations_imported_rows] CHECK ([imported_rows]>=0);
 GO

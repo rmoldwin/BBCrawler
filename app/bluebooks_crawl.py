@@ -25,6 +25,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 import term_recovery
+from project_paths import DEFAULT_CONFIG, load_config
 
 # Playwright is imported lazily inside main() so the pure-DB helpers
 # (store_page, reset_book, extract_references, classify_page_type) can be
@@ -82,7 +83,8 @@ def db(cfg) -> sqlite3.Connection:
 
 def init_db(con: sqlite3.Connection) -> None:
     import os
-    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    from project_paths import SQL
+    schema_path = SQL / "schema.sql"
     with open(schema_path, encoding="utf-8") as f:
         con.executescript(f.read())
     con.commit()
@@ -628,7 +630,7 @@ def crawl_one_book(page, cfg, con, book_id, toc_only=False, limit=0, capture_ima
 # --------------------------------------------------------------------------- #
 def main() -> int:
     ap = argparse.ArgumentParser(description="Crawl one or more WHO Blue Books volumes into SQLite.")
-    ap.add_argument("--config", default="config.json")
+    ap.add_argument("--config", default=str(DEFAULT_CONFIG))
     ap.add_argument("--book", type=int, nargs="+", required=True,
                     help="One or more book ids (the {id} in /chapters/{id}). e.g. --book 31 45 72")
     ap.add_argument("--toc-only", action="store_true", help="Only harvest the TOC into the queue.")
@@ -638,7 +640,7 @@ def main() -> int:
     ap.add_argument("--rescrape", action="store_true",
                     help="Purge each selected book's existing data first, then crawl fresh.")
     args = ap.parse_args()
-    cfg = json.load(open(args.config, encoding="utf-8"))
+    cfg = load_config(args.config)
 
     # config default for images can be overridden by --no-images
     capture_images = cfg.get("capture_images", True) and not args.no_images

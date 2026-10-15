@@ -17,17 +17,17 @@ import argparse
 import json
 import sys
 from playwright.sync_api import sync_playwright
-
-
-def load_config(path: str) -> dict:
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+from project_paths import DEFAULT_CONFIG, load_config
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Save an authenticated BlueBooksOnline session.")
-    ap.add_argument("--config", default="config.json")
+    ap.add_argument("--config", default=str(DEFAULT_CONFIG))
+    ap.add_argument("--wait-seconds", type=int,
+                    help="Allow this many seconds for login instead of waiting for terminal input")
     args = ap.parse_args()
+    if args.wait_seconds is not None and args.wait_seconds <= 0:
+        ap.error("--wait-seconds must be positive")
     cfg = load_config(args.config)
 
     with sync_playwright() as p:
@@ -39,14 +39,20 @@ def main() -> int:
 
         print("\n" + "=" * 68)
         print(">>> Log in manually in the browser window that just opened.")
-        print(">>> Once you can see your subscribed content, return here.")
-        print(">>> Press Enter to capture the authenticated session.")
+        if args.wait_seconds is not None:
+            print(f">>> Complete login within {args.wait_seconds} seconds.")
+            print(">>> The session will then be saved automatically; no Enter key is needed.")
+        else:
+            print(">>> Once you can see your subscribed content, return here.")
+            print(">>> Press Enter to capture the authenticated session.")
         print("=" * 68 + "\n")
-        try:
-            input()
-        except EOFError:
-            # Non-interactive fallback: wait a fixed window.
-            page.wait_for_timeout(cfg.get("login_wait_seconds", 120) * 1000)
+        if args.wait_seconds is not None:
+            page.wait_for_timeout(args.wait_seconds * 1000)
+        else:
+            try:
+                input()
+            except EOFError:
+                page.wait_for_timeout(cfg.get("login_wait_seconds", 120) * 1000)
 
         ctx.storage_state(path=cfg["auth_state_path"])
         print(f"[ok] Saved authenticated state -> {cfg['auth_state_path']}")

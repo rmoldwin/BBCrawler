@@ -149,7 +149,8 @@ def widen_table(cur, table: str, src_max_lens: dict[str, int], use_max_types: bo
 
 def main():
     ap = argparse.ArgumentParser(description="Widen SQL Server text columns based on SQLite max lengths.")
-    ap.add_argument("--sqlite", default="bluebooks.db", help="Path to SQLite DB (default: bluebooks.db)")
+    from project_paths import ROOT
+    ap.add_argument("--sqlite", default=str(ROOT / "bluebooks.db"), help="Path to SQLite DB (default: project database)")
     ap.add_argument("--server", default="(local)")
     ap.add_argument("--database", default="BlueBooks")
     ap.add_argument("--trusted", action="store_true", default=True)

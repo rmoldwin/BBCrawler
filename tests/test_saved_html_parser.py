@@ -5,7 +5,7 @@ import sys
 from unittest.mock import patch
 from contextlib import closing
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "BBNotebook"))
+import _bootstrap
 from bb_entity_extract import (
     audit_saved_body_coverage,
     build_spreadsheet_rows,

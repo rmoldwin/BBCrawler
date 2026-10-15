@@ -1,3 +1,4 @@
+import _bootstrap
 import unittest
 
 from clean_term2 import clean2

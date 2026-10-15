@@ -13,13 +13,14 @@ import sqlite3
 import sys
 from pathlib import Path
 from contextlib import closing
+from project_paths import DEFAULT_CONFIG, load_config
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Build the SQLite FTS5 index.")
-    ap.add_argument("--config", default="config.json")
+    ap.add_argument("--config", default=str(DEFAULT_CONFIG))
     args = ap.parse_args()
-    cfg = json.load(open(args.config, encoding="utf-8"))
+    cfg = load_config(args.config)
 
     from bluebooks_local import (connect_sqlite, migrate_sqlite, backfill_sections,
                                 build_documents, rebuild_sqlite_search)

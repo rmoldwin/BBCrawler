@@ -76,7 +76,8 @@ class _Expression:
 
 
 def _compile() -> tuple[tuple, ...]:
-    text = Path(__file__).with_name("00_dbo_Clean2.sql").read_text(encoding="utf-8")
+    from project_paths import SQL
+    text = (SQL / "00_dbo_Clean2.sql").read_text(encoding="utf-8")
     tokens = [token for token in _TOKEN.findall(text) if not token.startswith("--")]
     if any(token in {"IF", "WHILE", "CASE", "EXEC", "SELECT"} for token in tokens):
         raise ValueError("Clean2 must remain a straight-line string replacement program")

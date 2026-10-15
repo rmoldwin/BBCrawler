@@ -398,7 +398,8 @@ def main():
             namespace["engine"].dispose()
         result["site_notebook_cells"][backend] = executed
     plt.close("all")
-    (local.ROOT / "local-validation.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    local.LOCAL.mkdir(exist_ok=True)
+    (local.LOCAL / "validation.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps({k: v for k, v in result.items() if k != "parity"}, indent=2))
     print("All", len(result["parity"]), "managed table hashes match.")
 

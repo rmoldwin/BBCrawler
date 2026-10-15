@@ -12,6 +12,7 @@ import json
 import re
 import sqlite3
 import sys
+from project_paths import DEFAULT_CONFIG, load_config
 
 if hasattr(sys.stdout, "reconfigure"):
     # Prefer UTF-8 console output on Windows to avoid mojibake in captured output.
@@ -129,7 +130,7 @@ def fts_search(con, query, book_id=None, limit=25):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Search the Blue Books corpus.")
-    ap.add_argument("--config", default="config.json")
+    ap.add_argument("--config", default=str(DEFAULT_CONFIG))
     ap.add_argument("query", nargs="?", help="FTS5 MATCH expression")
     ap.add_argument("--book", type=int, default=None)
     ap.add_argument("--limit", type=int, default=25)
@@ -139,7 +140,7 @@ def main() -> int:
     ap.add_argument("--sections", action="store_true",
                     help="Search per-section (default is page-level, which matches AND across sections)")
     args = ap.parse_args()
-    cfg = json.load(open(args.config, encoding="utf-8"))
+    cfg = load_config(args.config)
     con = connect(cfg)
 
     if args.pmid:

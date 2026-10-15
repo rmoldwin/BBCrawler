@@ -11,7 +11,7 @@ import re
 from term_hygiene import is_standalone_placeholder, term_keys
 from term_recovery import key
 
-ROOT = Path(__file__).resolve().parent
+from project_paths import ROOT, SQL
 TABLES = ("term_saved_sections", "term_reference_rows", "term_lookup_evaluations",
           "term_code_candidates", "term_review_decisions", "term_pipeline_migrations")
 VERSION = "deterministic-2"
@@ -42,7 +42,7 @@ def migrate(con):
         if name not in cols:
             con.execute(f"ALTER TABLE page_term_mentions ADD COLUMN {name} {typ}")
     con.commit()
-    con.executescript((ROOT / "schema_term_pipeline.sql").read_text(encoding="utf-8"))
+    con.executescript((SQL / "schema_term_pipeline.sql").read_text(encoding="utf-8"))
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_term_observation ON page_term_mentions(observation_key)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_term_observation_page_norm ON page_term_mentions(page_id,TermNormUS)")
     # Old lexicon matches were code-first. They remain audit evidence, not the
@@ -626,6 +626,49 @@ def view_sql(sqlserver=False):
         f"{json_value}(c.reference_evidence,'$.support[0].row'))"
     )
     reference_row = f"TRY_CONVERT(INT,{reference_row})" if sqlserver else f"CAST({reference_row} AS INTEGER)"
+    paired_text_fields = (
+        "term_role", "term_source", "source_tables", "page_sections",
+        "terminology_kind", "lookup_outcome", "match_type", "conditions",
+        "review_status", "source_kind",
+    )
+    paired_int_fields = (
+        "is_proposed_code", "is_proposed_term", "is_subtype", "has_source",
+        "has_candidate", "has_source_observation", "has_legacy_observation",
+    )
+    paired_projection = ",\n ".join(
+        f"CASE WHEN a.{field} IS NULL THEN z.{field} "
+        f"WHEN z.{field} IS NULL OR a.{field}{exact}=z.{field}{exact} THEN a.{field} "
+        f"WHEN a.{field}{exact}<z.{field}{exact} THEN "
+        + (f"CONCAT(a.{field},N'; ',z.{field})" if sqlserver
+           else f"a.{field}||'; '||z.{field}")
+        + " ELSE "
+        + (f"CONCAT(z.{field},N'; ',a.{field})" if sqlserver
+           else f"z.{field}||'; '||a.{field}")
+        + f" END AS {field}"
+        for field in paired_text_fields
+    )
+    paired_projection += ",\n " + ",\n ".join(
+        f"CASE WHEN COALESCE(a.{field},0)>COALESCE(z.{field},0) "
+        f"THEN COALESCE(a.{field},0) ELSE COALESCE(z.{field},0) END AS {field}"
+        for field in paired_int_fields
+    )
+    edition_fields = (
+        "candidateTermUS", "is_proposed_code", "is_proposed_term",
+        "lookup_outcome", "match_type", "conditions", "review_status",
+    )
+    edition_projection = ",\n ".join(
+        f"{alias}.{field} AS {field}{suffix}"
+        for suffix, alias in (("32", "a"), ("4", "z"))
+        for field in edition_fields
+    )
+    edition_output = ",".join(
+        f"g.{field}{suffix}" for suffix in ("32", "4") for field in edition_fields
+    )
+    pair_select = f"""SELECT KEY.page_id,KEY.TermUS,KEY.TermNormUS,
+ a.code AS ICDO32,z.code AS ICDO4,
+ COALESCE(z.candidateTermUS,a.candidateTermUS) AS candidateTermUS,
+ {paired_projection},
+ {edition_projection}"""
     # Source rows and candidate rows share a display grain. Multiple observations
     # do not multiply rows; evidence stays on the linked audit view.
     legacy = term_recovery.view_sql(sqlserver=sqlserver).split(batch)[:3]
@@ -675,7 +718,26 @@ JOIN {prefix}term_lookup_evaluations e ON e.mention_id=m.mention_id
 LEFT JOIN {prefix}term_code_candidates c ON c.evaluation_id=e.evaluation_id
 {batch}
 {create} {prefix}v_page_code_terms AS
-WITH raw AS (
+WITH evaluation_outcomes AS (
+ SELECT m.page_id,m.TermUS{exact} AS TermUS,e.edition,
+ MAX(e.outcome{text_collate}) AS outcome
+ FROM {prefix}page_term_mentions m
+ JOIN {prefix}term_lookup_evaluations e ON e.mention_id=m.mention_id AND e.is_current=1
+ GROUP BY m.page_id,m.TermUS{exact},e.edition
+),
+candidate_keys AS (
+ SELECT DISTINCT m.page_id,m.TermUS{exact} AS TermUS,c.code
+ FROM {prefix}page_term_mentions m
+ JOIN {prefix}term_lookup_evaluations e ON e.mention_id=m.mention_id AND e.is_current=1
+ JOIN {prefix}term_code_candidates c ON c.evaluation_id=e.evaluation_id
+ WHERE c.review_status<>'rejected'
+),
+source_keys AS (
+ SELECT page_id,TermUS{exact} AS TermUS,code FROM {prefix}entity_codes
+ UNION
+ SELECT page_id,TermUS{exact},COALESCE(icdo_code_raw,icdo_code) FROM {prefix}page_icdo_codes
+),
+raw AS (
  SELECT c.page_id,c.TermUS{exact} AS TermUS,c.TermNormUS,
  CASE WHEN LENFN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END AS code_edition,
  c.code,NULL AS candidateTermUS,0 AS is_proposed_code,0 AS is_proposed_term,
@@ -683,36 +745,31 @@ WITH raw AS (
  c.term_role,CAST(c.is_subtype AS INT) AS is_subtype,
  'coding_section' AS term_source,'entity_codes' AS source_tables,
  'ICD-O coding' AS page_sections,'coding' AS terminology_kind,
- COALESCE((SELECT MAX(e.outcome) FROM {prefix}term_lookup_evaluations e
- JOIN {prefix}page_term_mentions m ON m.mention_id=e.mention_id
- WHERE m.page_id=c.page_id AND m.TermUS{exact}=c.TermUS{exact} AND e.is_current=1
- AND e.edition=CASE WHEN LENFN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END),
- 'not_evaluated') AS lookup_outcome,NULL AS match_type,NULL AS conditions,NULL AS review_status
- FROM {prefix}entity_codes c WHERE c.code IS NOT NULL AND TRIM(c.code)<>''
- AND NOT EXISTS(SELECT 1 FROM {prefix}v_term_candidate_evidence v WHERE v.page_id=c.page_id
- AND v.TermUS{exact}=c.TermUS{exact} AND v.code=c.code AND v.is_current=1 AND v.review_status<>'rejected')
+ COALESCE(o.outcome,'not_evaluated') AS lookup_outcome,
+ NULL AS match_type,NULL AS conditions,NULL AS review_status
+ FROM {prefix}entity_codes c
+ LEFT JOIN evaluation_outcomes o ON o.page_id=c.page_id AND o.TermUS=c.TermUS{exact}
+ AND o.edition=CASE WHEN LENFN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END
+ LEFT JOIN candidate_keys k ON k.page_id=c.page_id AND k.TermUS=c.TermUS{exact} AND k.code=c.code
+ WHERE c.code IS NOT NULL AND TRIM(c.code)<>'' AND k.code IS NULL
  UNION ALL
  SELECT p.page_id,p.TermUS,p.TermNormUS,
  CASE WHEN LENFN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END,
  COALESCE(p.icdo_code_raw,p.icdo_code),NULL,0,0,'contextual_code','source',
  p.term_role,CASE WHEN p.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
  p.term_source,'page_icdo_codes',p.section_heading,'coding',
- COALESCE((SELECT MAX(e.outcome) FROM {prefix}term_lookup_evaluations e
- JOIN {prefix}page_term_mentions m ON m.mention_id=e.mention_id
- WHERE m.page_id=p.page_id AND m.TermUS{exact}=p.TermUS{exact} AND e.is_current=1
- AND e.edition=CASE WHEN LENFN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END),
- 'not_evaluated'),NULL,NULL,NULL
- FROM {prefix}page_icdo_codes p WHERE COALESCE(p.icdo_code_raw,p.icdo_code) IS NOT NULL
+ COALESCE(o.outcome,'not_evaluated'),NULL,NULL,NULL
+ FROM {prefix}page_icdo_codes p
+ LEFT JOIN evaluation_outcomes o ON o.page_id=p.page_id AND o.TermUS=p.TermUS{exact}
+ AND o.edition=CASE WHEN LENFN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END
+ LEFT JOIN candidate_keys k ON k.page_id=p.page_id AND k.TermUS=p.TermUS{exact}
+ AND k.code=COALESCE(p.icdo_code_raw,p.icdo_code)
+ WHERE COALESCE(p.icdo_code_raw,p.icdo_code) IS NOT NULL
  AND p.TermUS IS NOT NULL
- AND NOT EXISTS(SELECT 1 FROM {prefix}v_term_candidate_evidence v WHERE v.page_id=p.page_id
- AND v.TermUS{exact}=p.TermUS{exact} AND v.code=COALESCE(p.icdo_code_raw,p.icdo_code)
- AND v.is_current=1 AND v.review_status<>'rejected')
+ AND k.code IS NULL
  UNION ALL
  SELECT m.page_id,m.TermUS,m.TermNormUS,e.edition,c.code,c.candidateTermUS{exact},
- CASE WHEN c.code IS NOT NULL AND NOT EXISTS(
- SELECT 1 FROM {prefix}entity_codes s WHERE s.page_id=m.page_id AND s.TermUS{exact}=m.TermUS{exact} AND s.code=c.code)
- AND NOT EXISTS(SELECT 1 FROM {prefix}page_icdo_codes s WHERE s.page_id=m.page_id
- AND s.TermUS{exact}=m.TermUS{exact} AND COALESCE(s.icdo_code_raw,s.icdo_code)=c.code) THEN 1 ELSE 0 END,
+ CASE WHEN c.code IS NOT NULL AND s.code IS NULL THEN 1 ELSE 0 END,
  CASE WHEN c.candidateTermUS IS NOT NULL AND c.candidateTermUS{exact}<>m.TermUS{exact} THEN 1 ELSE 0 END,
  CASE WHEN c.code IS NULL THEN 'uncoded_term' ELSE 'candidate' END,m.term_origin,
  m.term_role,CASE WHEN m.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
@@ -725,10 +782,11 @@ WITH raw AS (
  FROM {prefix}page_term_mentions m JOIN {prefix}term_lookup_evaluations e
  ON e.mention_id=m.mention_id AND e.is_current=1
  LEFT JOIN {prefix}term_code_candidates c ON c.evaluation_id=e.evaluation_id AND c.review_status<>'rejected'
+ LEFT JOIN source_keys s ON s.page_id=m.page_id AND s.TermUS=m.TermUS{exact} AND s.code=c.code
  WHERE m.is_current=1 AND m.review_status<>'rejected'
 ),
 grain AS (
- SELECT page_id,TermUS,MAX(TermNormUS) AS TermNormUS,code_edition,code,candidateTermUS,
+ SELECT page_id,TermUS,TermNormUS,code_edition,code,candidateTermUS,
  MAX(is_proposed_code) AS is_proposed_code,MAX(is_proposed_term) AS is_proposed_term,
  MAX(term_role{text_collate}) AS term_role,MAX(is_subtype) AS is_subtype,
  MAX(term_source{text_collate}) AS term_source,MAX(source_tables{text_collate}) AS source_tables,
@@ -741,7 +799,28 @@ grain AS (
  MAX(source_kind{text_collate}) AS source_kind,
  MAX(CASE WHEN source_kind='source' THEN 1 ELSE 0 END) AS has_source_observation,
  MAX(CASE WHEN source_kind='legacy_import' THEN 1 ELSE 0 END) AS has_legacy_observation
- FROM raw GROUP BY page_id,TermUS,code_edition,code,candidateTermUS
+ FROM raw GROUP BY page_id,TermUS,TermNormUS,code_edition,code,candidateTermUS
+),
+ranked AS (
+ SELECT grain.*,MAX(CASE WHEN code IS NOT NULL THEN 1 ELSE 0 END)
+ OVER (PARTITION BY page_id,TermUS,TermNormUS,code_edition) AS has_code
+ FROM grain
+),
+edition32 AS (
+ SELECT * FROM ranked WHERE code_edition='ICD-O-3.2' AND (code IS NOT NULL OR has_code=0)
+),
+edition4 AS (
+ SELECT * FROM ranked WHERE code_edition='ICD-O-4' AND (code IS NOT NULL OR has_code=0)
+),
+paired AS (
+ {pair_select.replace("KEY.", "a.")}
+ FROM edition32 a LEFT JOIN edition4 z
+ ON z.page_id=a.page_id AND z.TermUS=a.TermUS
+ UNION ALL
+ {pair_select.replace("KEY.", "z.")}
+ FROM edition4 z LEFT JOIN edition32 a
+ ON z.page_id=a.page_id AND z.TermUS=a.TermUS
+ WHERE a.page_id IS NULL
 ),
 site_rows AS (
  SELECT page_id,c_code,MAX(confidence_score) AS confidence_score
@@ -761,10 +840,8 @@ SELECT b.alias,b.title AS book_name,b.book_id,b.edition,g.page_id,
  WHEN g.term_source='page_title' THEN 'Page title'
  ELSE g.page_sections
  END AS page_sections,
- g.TermUS,g.TermNormUS,g.candidateTermUS,g.code_edition,
- CASE WHEN g.code_edition='ICD-O-3.2' THEN g.code END AS ICDO32,
- CASE WHEN g.code_edition='ICD-O-4' THEN g.code END AS ICDO4,
- g.code AS morphology_code,g.is_subtype,g.term_role,g.term_source,
+ g.TermUS,g.TermNormUS,g.candidateTermUS,g.ICDO32,g.ICDO4,
+ COALESCE(g.ICDO4,g.ICDO32) AS morphology_code,g.is_subtype,g.term_role,g.term_source,
  CASE WHEN g.has_source=1 AND g.has_candidate=1 THEN 'source_assignment; candidate'
  WHEN g.has_source=1 THEN 'source_assignment' WHEN g.has_candidate=1 THEN 'candidate'
  ELSE 'uncoded_term' END AS code_kind,
@@ -774,8 +851,9 @@ SELECT b.alias,b.title AS book_name,b.book_id,b.edition,g.page_id,
  g.source_tables,g.is_proposed_code,g.is_proposed_term,g.lookup_outcome,
  sites.candidate_topography_codes,
  {site_min_expr} AS site_confidence_min,
- {site_max_expr} AS site_confidence_max
-FROM grain g JOIN {prefix}pages p ON p.page_id=g.page_id
+ {site_max_expr} AS site_confidence_max,
+ {edition_output}
+FROM paired g JOIN {prefix}pages p ON p.page_id=g.page_id
 JOIN {prefix}books b ON b.book_id=p.book_id
 LEFT JOIN {prefix}chapters ch ON ch.chapter_id=p.chapter_id
 LEFT JOIN {prefix}entity_pages ep ON ep.page_id=g.page_id

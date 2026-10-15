@@ -163,7 +163,7 @@ def validate(path, baseline=None, server=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sqlite", type=Path, default=Path("bluebooks.db"))
+    parser.add_argument("--sqlite", type=Path, default=local.ROOT / "bluebooks.db")
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--server", action="store_true")
     parser.add_argument("--output", type=Path)

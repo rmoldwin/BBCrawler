@@ -27,6 +27,7 @@ bluebooks.db-wal
 # Local reference corpora and historical files
 /Library/
 /Archive/
+/local/
 
 # Local packaging/install artifacts
 *.zip

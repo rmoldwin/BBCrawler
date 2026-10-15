@@ -25,6 +25,7 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 import term_recovery
+from project_paths import DEFAULT_CONFIG, load_config
 
 # Lazy import so `list` mode works without the browser package.
 try:
@@ -46,7 +47,8 @@ def db(cfg) -> sqlite3.Connection:
 
 def init_db(con) -> None:
     import os
-    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    from project_paths import SQL
+    schema_path = SQL / "schema.sql"
     with open(schema_path, encoding="utf-8") as f:
         con.executescript(f.read())
     con.commit()
@@ -366,11 +368,11 @@ def list_books(con, as_json=False) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Discover and inventory Blue Books volumes.")
-    ap.add_argument("--config", default="config.json")
+    ap.add_argument("--config", default=str(DEFAULT_CONFIG))
     ap.add_argument("mode", choices=["discover", "list"])
     ap.add_argument("--json", action="store_true", help="For 'list': emit JSON.")
     args = ap.parse_args()
-    cfg = json.load(open(args.config, encoding="utf-8"))
+    cfg = load_config(args.config)
 
     con = db(cfg)
     init_db(con)

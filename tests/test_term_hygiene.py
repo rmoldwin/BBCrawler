@@ -1,3 +1,4 @@
+import _bootstrap
 import sqlite3
 import unittest
 import hashlib

@@ -1,3 +1,4 @@
+import _bootstrap
 import json
 import sqlite3
 import unittest
@@ -34,12 +35,13 @@ class PipelineTests(unittest.TestCase):
 
     def test_title_discovery_and_independent_edition_evaluations(self):
         self.run_pipeline()
-        row = self.con.execute("SELECT TermUS,ICDO4,is_proposed_code,is_proposed_term,lookup_outcome FROM v_page_code_terms WHERE page_id=1 AND code_edition='ICD-O-4'").fetchone()
-        self.assertEqual(row, ("Gynandroblastoma", "86320/1", 1, 0, "matched"))
+        rows = self.con.execute("SELECT TermUS,ICDO32,ICDO4,is_proposed_code4,is_proposed_term4,lookup_outcome4 FROM v_page_code_terms WHERE page_id=1").fetchall()
+        self.assertEqual(rows, [("Gynandroblastoma", "8632/1", "86320/1", 1, 0, "matched")])
+        self.assertNotIn("code_edition", [r[1] for r in self.con.execute("PRAGMA table_info(v_page_code_terms)")])
         self.assertEqual(self.con.execute("SELECT DISTINCT source_kind FROM entity_term_provenance").fetchall(), [])
         self.refs = [self.refs[0], reference("ICD-O-4", "80000/3", "Neoplasm", revision="b"*64)]
         self.run_pipeline()
-        self.assertEqual(self.con.execute("SELECT lookup_outcome FROM v_page_code_terms WHERE page_id=1 AND code_edition='ICD-O-4'").fetchone()[0], "no_match")
+        self.assertEqual(self.con.execute("SELECT ICDO32,ICDO4,lookup_outcome4 FROM v_page_code_terms WHERE page_id=1").fetchone(), ("8632/1", None, "no_match"))
 
     def test_page_4941_gynandroblastoma_is_proposed_from_title(self):
         self.con.execute(
@@ -52,9 +54,9 @@ class PipelineTests(unittest.TestCase):
         )
         self.run_pipeline()
         row = self.con.execute(
-            "SELECT ICDO4,is_proposed_code,is_proposed_term,lookup_outcome,code_kind "
+            "SELECT ICDO4,is_proposed_code4,is_proposed_term4,lookup_outcome4,code_kind "
             "FROM v_page_code_terms WHERE page_id=4941 AND TermUS='Gynandroblastoma' "
-            "AND code_edition='ICD-O-4'"
+            "AND ICDO4 IS NOT NULL"
         ).fetchone()
         self.assertEqual(row, ("86320/1", 1, 0, "matched", "candidate"))
         self.assertEqual(
@@ -70,6 +72,64 @@ class PipelineTests(unittest.TestCase):
             with self.subTest(term=term):
                 self.assertTrue(is_standalone_placeholder(term))
         self.assertFalse(is_standalone_placeholder("Tumor (classification not applicable)"))
+
+    def test_multiple_codes_preserve_all_scalar_combinations(self):
+        self.refs.extend([
+            reference("ICD-O-3.2", "8633/1", "Gynandroblastoma", row=4),
+            reference("ICD-O-4", "86321/1", "Gynandroblastoma", row=5),
+        ])
+        self.run_pipeline()
+        rows = self.con.execute(
+            "SELECT ICDO32,ICDO4 FROM v_page_code_terms WHERE page_id=1"
+        ).fetchall()
+        self.assertEqual(set(rows), {
+            ("8632/1", "86320/1"), ("8632/1", "86321/1"),
+            ("8633/1", "86320/1"), ("8633/1", "86321/1"),
+        })
+        self.assertEqual(len(rows), 4)
+
+    def test_both_unmapped_and_one_edition_only(self):
+        self.refs = [
+            reference("ICD-O-3.2", "8000/3", "Unrelated label"),
+            reference("ICD-O-4", "80000/3", "Unrelated label"),
+        ]
+        self.run_pipeline()
+        self.assertEqual(self.con.execute(
+            "SELECT ICDO32,ICDO4,lookup_outcome32,lookup_outcome4 "
+            "FROM v_page_code_terms WHERE page_id=1"
+        ).fetchall(), [(None, None, "no_match", "no_match")])
+        self.refs[1] = reference("ICD-O-4", "86320/1", "Gynandroblastoma")
+        self.run_pipeline()
+        self.assertEqual(self.con.execute(
+            "SELECT ICDO32,ICDO4 FROM v_page_code_terms WHERE page_id=1"
+        ).fetchall(), [(None, "86320/1")])
+
+    def test_edition_labels_and_review_metadata_remain_independent(self):
+        self.run_pipeline()
+        self.con.execute(
+            "UPDATE term_code_candidates SET candidateTermUS='Different official label',"
+            "conditions='Edition 4 condition',review_status='needs_review' "
+            "WHERE code='86320/1'"
+        )
+        self.assertEqual(self.con.execute(
+            "SELECT ICDO32,ICDO4,candidateTermUS32,candidateTermUS4,"
+            "conditions32,conditions4,review_status32,review_status4 "
+            "FROM v_page_code_terms WHERE page_id=1"
+        ).fetchall(), [("8632/1", "86320/1", "Gynandroblastoma",
+                       "Different official label", None, "Edition 4 condition",
+                       "proposed", "needs_review")])
+
+    def test_source_only_editions_combine_without_an_evaluation(self):
+        for ordinal, code in enumerate(("8632/1", "86320/1")):
+            self.con.execute(
+                "INSERT INTO entity_codes(page_id,ordinal,term,code,is_subtype,"
+                "term_role,TermUS,TermNormUS) VALUES(1,?,'Source term',?,0,"
+                "'preferred','Source term','Source term')", (ordinal, code)
+            )
+        pipeline.ensure_views(self.con)
+        self.assertEqual(self.con.execute(
+            "SELECT ICDO32,ICDO4,is_proposed_code FROM v_page_code_terms WHERE page_id=1"
+        ).fetchall(), [("8632/1", "86320/1", 0)])
 
     def test_longest_embedded_phrase_and_context(self):
         refs = [reference("ICD-O-4", "80000/3", "Carcinoma"),
@@ -111,14 +171,14 @@ class PipelineTests(unittest.TestCase):
     def test_multiple_evidence_consolidated_without_overwriting_source(self):
         self.con.execute("INSERT INTO entity_codes(page_id,ordinal,term,code,is_subtype,term_role,TermUS,TermNormUS) VALUES(1,0,'Gynandroblastoma','86320/1',0,'preferred','Gynandroblastoma','Gynandroblastoma')")
         self.run_pipeline()
-        rows = self.con.execute("SELECT code_kind,is_proposed_code FROM v_page_code_terms WHERE page_id=1 AND ICDO4='86320/1'").fetchall()
+        rows = self.con.execute("SELECT code_kind,is_proposed_code4 FROM v_page_code_terms WHERE page_id=1 AND ICDO4='86320/1'").fetchall()
         self.assertEqual(rows, [("source_assignment; candidate", 0)])
         self.assertEqual(self.con.execute("SELECT code FROM entity_codes").fetchone()[0], "86320/1")
 
     def test_ambiguity_and_evidence_rows(self):
         self.refs.append(reference("ICD-O-4", "86321/1", "Gynandroblastoma", row=4))
         self.run_pipeline()
-        outcomes = self.con.execute("SELECT DISTINCT lookup_outcome FROM v_page_code_terms WHERE page_id=1 AND code_edition='ICD-O-4'").fetchall()
+        outcomes = self.con.execute("SELECT DISTINCT lookup_outcome4 FROM v_page_code_terms WHERE page_id=1 AND ICDO4 IS NOT NULL").fetchall()
         self.assertEqual(outcomes, [("ambiguous",)])
         evidence = json.loads(self.con.execute("SELECT reference_evidence FROM term_code_candidates LIMIT 1").fetchone()[0])
         self.assertEqual(evidence[0]["row"], 3)
@@ -138,7 +198,7 @@ class PipelineTests(unittest.TestCase):
         self.con.execute("UPDATE entity_pages SET title='Unclassified squamous cell carcinoma variant' WHERE page_id=1")
         self.refs.append(reference("ICD-O-4", "80700/3", "Squamous cell carcinoma", row=4))
         self.run_pipeline()
-        row = self.con.execute("SELECT match_type,conditions,lookup_outcome FROM v_page_code_terms WHERE page_id=1 AND ICDO4='80700/3'").fetchone()
+        row = self.con.execute("SELECT match_type4,conditions4,lookup_outcome4 FROM v_page_code_terms WHERE page_id=1 AND ICDO4='80700/3'").fetchone()
         self.assertEqual(row[0], "broader")
         self.assertIn("qualifiers", row[1])
         self.assertEqual(row[2], "needs_review")

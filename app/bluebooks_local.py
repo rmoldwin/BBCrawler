@@ -1,6 +1,6 @@
 """Local-only enrichment, verified mirroring and full-text search.
 
-No browser, HTTP or scraping entry points are invoked. See DATA_DICTIONARY.md.
+No browser, HTTP or scraping entry points are invoked. See docs/technical/data-guide.md.
 """
 from __future__ import annotations
 
@@ -21,8 +21,7 @@ import term_hygiene
 import term_recovery
 import term_pipeline
 
-ROOT = Path(__file__).resolve().parent
-COMPANION = ROOT.parent / "BBNotebook"
+from project_paths import ROOT, SQL, LOCAL, COMPANION
 VERSION = 11
 TABLES = (
     "books", "chapters", "page_groups", "pages", "sections", "authors", "images",
@@ -125,7 +124,7 @@ def _migrate_page_icdo_codes_nullable(con: sqlite3.Connection) -> None:
 def migrate_sqlite(con: sqlite3.Connection) -> None:
     if con.in_transaction:
         raise RuntimeError("Commit caller changes before migration")
-    con.executescript((ROOT / "schema.sql").read_text(encoding="utf-8"))
+    con.executescript((SQL / "schema.sql").read_text(encoding="utf-8"))
     book_cols = columns(con, "books")
     if "alias" not in book_cols:
         con.execute("ALTER TABLE books ADD COLUMN alias TEXT")
@@ -143,7 +142,7 @@ def migrate_sqlite(con: sqlite3.Connection) -> None:
     if "source_anchor" not in columns(con, "sections"):
         con.execute("ALTER TABLE sections ADD COLUMN source_anchor TEXT")
     con.commit()
-    con.executescript((ROOT / "schema_enrichment.sql").read_text(encoding="utf-8"))
+    con.executescript((SQL / "schema_enrichment.sql").read_text(encoding="utf-8"))
     if "source_kind" not in columns(con, "entity_identifiers"):
         con.execute(
             "ALTER TABLE entity_identifiers ADD COLUMN "
@@ -970,9 +969,9 @@ def deploy_term_views(path: Path, server: str = "localhost", database: str = "Bl
                 view_checks[view] = len(a)
             for cursor, prefix in ((src, ""), (cur, "dbo.")):
                 duplicate = cursor.execute(
-                    "SELECT page_id,code_edition,morphology_code,TermUS,candidateTermUS,COUNT(*) "
+                    "SELECT page_id,ICDO32,ICDO4,TermUS,candidateTermUS32,candidateTermUS4,COUNT(*) "
                     f"FROM {prefix}v_page_code_terms "
-                    "GROUP BY page_id,code_edition,morphology_code,TermUS,candidateTermUS "
+                    "GROUP BY page_id,ICDO32,ICDO4,TermUS,candidateTermUS32,candidateTermUS4 "
                     "HAVING COUNT(*)>1"
                 ).fetchone()
                 if duplicate:
@@ -1550,12 +1549,12 @@ def ensure_server_schema(src: sqlite3.Connection, cn) -> None:
         "p.title,p.page_type,p.url,p.book_id,b.title AS book_title,b.edition "
         "FROM dbo.sections s JOIN dbo.pages p ON p.page_id=s.page_id JOIN dbo.books b ON b.book_id=p.book_id"
     )
-    for batch in re.split(r"(?im)^\s*GO\s*$", (ROOT / "00_dbo_Clean.sql").read_text(encoding="utf-8")):
+    for batch in re.split(r"(?im)^\s*GO\s*$", (SQL / "00_dbo_Clean.sql").read_text(encoding="utf-8")):
         if batch.strip():
             cur.execute(batch)
     # Install the exact spelling/comparison composition before write-time maintenance.
     for script in (term_hygiene.normalizer_sql(),
-                   (ROOT / "00_dbo_Clean2.sql").read_text(encoding="utf-8")):
+                   (SQL / "00_dbo_Clean2.sql").read_text(encoding="utf-8")):
         for batch in re.split(r"(?im)^\s*GO\s*$", script):
             if batch.strip():
                 cur.execute(batch)
