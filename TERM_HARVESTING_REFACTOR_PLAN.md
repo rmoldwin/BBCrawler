@@ -2,13 +2,30 @@
 
 Updated: 2026-10-14
 
-Status: authorized implementation; staged extraction/refresh validation passed,
-paired database deployment and final cross-engine acceptance in progress.
+Status: implementation completed in BBCrawler and validated on both SQLite and
+SQL Server; GitHub push pending remote configuration.
 
 This is the maintained plan for the crawler and companion notebook repository,
 and for both SQLite and SQL Server databases. Update it as implementation
 decisions, validation results, or scope change. The maintainer authorized
 autonomous implementation after the verified backup/baseline gate.
+
+## Implementation completion notes (2026-10-14)
+
+- Backups were verified before implementation and again before write-heavy runs.
+- The observation-first pipeline was implemented and refreshed locally.
+- SQL Server was mirrored from SQLite after refresh and cross-engine table parity
+  completed successfully.
+- Acceptance checks passed:
+  - all recognized entity pages have current title observations,
+  - standalone `Not applicable` placeholders removed from tracked term sources,
+  - page 4941 includes proposed ICD-O-4 `86320/1` for Gynandroblastoma,
+  - page 5029 remains included as an entity page with substantive content,
+  - cross-engine view parity passed for:
+    `v_page_code_terms`, `v_entity_terms`,
+    `v_entity_term_provenance`, `v_entity_term_code_matches`,
+    `v_term_candidate_evidence`.
+- Full local test suite passed after implementation.
 
 ## Change summary
 
