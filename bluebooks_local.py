@@ -19,17 +19,18 @@ import sys
 import time
 import term_hygiene
 import term_recovery
+import term_pipeline
 
 ROOT = Path(__file__).resolve().parent
 COMPANION = ROOT.parent / "BBNotebook"
-VERSION = 10
+VERSION = 11
 TABLES = (
     "books", "chapters", "page_groups", "pages", "sections", "authors", "images",
     "page_links", "references", "entity_pages", "entity_codes",
     "entity_related_terms", "entity_term_provenance", "entity_term_code_matches",
     "entity_identifiers", "cpc_curation", "icdo4_morphology", "cpc_morph_codes",
     "icdo_site_specific_terms", "icdo_site_specific_term_sites", "page_icdo_codes",
-    "page_term_mentions", "page_site_hints", "page_entity_evidence",
+    "page_term_mentions", *term_pipeline.TABLES, "page_site_hints", "page_entity_evidence",
     "page_search_documents", "enum_values",
 )
 EXCLUDED = ("agent_jobs", "crawl_queue", "crawl_runs", "sysdiagrams")
@@ -37,7 +38,7 @@ DERIVED = (
     "entity_pages", "entity_codes", "entity_related_terms",
     "entity_term_provenance", "entity_term_code_matches", "entity_identifiers", "icdo4_morphology",
     "cpc_morph_codes", "icdo_site_specific_terms", "icdo_site_specific_term_sites",
-    "page_icdo_codes", "page_term_mentions", "page_site_hints",
+    "page_icdo_codes", "page_term_mentions", *term_pipeline.TABLES, "page_site_hints",
     "page_entity_evidence", "page_search_documents",
 )
 
@@ -179,6 +180,9 @@ def migrate_sqlite(con: sqlite3.Connection) -> None:
     con.create_function("Clean", 1, companion("clean_term").clean, deterministic=True)
     term_hygiene.ensure_sqlite(con)
     term_recovery.ensure_sqlite_views(con)
+    term_pipeline.migrate(con)
+    if con.execute("SELECT 1 FROM term_lookup_evaluations LIMIT 1").fetchone():
+        term_pipeline.ensure_views(con)
     con.execute(f"PRAGMA user_version={VERSION}")
     con.commit()
 
@@ -255,7 +259,7 @@ def backfill_sections(con: sqlite3.Connection) -> dict:
         if not raw:
             report["missing_html"].append(page_id)
             continue
-        parsed = extractor.extract_saved_sections(raw)
+        parsed = extractor.cached_saved_sections(con, page_id, raw)
         if not parsed:
             report["unparsed_pages"].append(page_id)
             continue
@@ -324,11 +328,20 @@ def _entities(con: sqlite3.Connection, stamp: str) -> None:
             entity = record["entity"]
             page_id = record["page_id"]
             con.execute(
-                "INSERT INTO entity_pages VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO entity_pages VALUES (?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(page_id) DO UPDATE SET definition=excluded.definition,"
+                "extracted_at=excluded.extracted_at",
                 (page_id, book_id, record["chapter"], record["category"],
                  record["subcategory"], entity.title, entity.definition, stamp),
             )
             for ordinal, code in enumerate(list(entity.coded_terms) + list(entity.subtypes)):
+                if term_hygiene.is_standalone_placeholder(code.term):
+                    continue
+                if con.execute(
+                    "SELECT 1 FROM entity_codes WHERE page_id=? AND term=? AND code=? AND is_subtype=?",
+                    (page_id, code.term, code.code, int(code.is_subtype)),
+                ).fetchone():
+                    continue
                 con.execute(
                     "INSERT INTO entity_codes(page_id,ordinal,term,code,is_subtype,term_role) VALUES(?,?,?,?,?,?)",
                     (page_id, ordinal, code.term, code.code, int(code.is_subtype),
@@ -339,8 +352,11 @@ def _entities(con: sqlite3.Connection, stamp: str) -> None:
                                 ("other", getattr(entity, "related_other", []) or [])):
                 role = "synonym" if kind == "acceptable" else ("not_recommended" if kind == "not_recommended" else "related")
                 con.executemany(
-                    "INSERT INTO entity_related_terms(page_id,kind,term,term_role) VALUES(?,?,?,?)",
-                    [(page_id, kind, term, role) for term in terms],
+                    "INSERT INTO entity_related_terms(page_id,kind,term,term_role) "
+                    "SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM entity_related_terms "
+                    "WHERE page_id=? AND kind=? AND term=?)",
+                    [(page_id, kind, term, role, page_id, kind, term) for term in terms
+                     if not term_hygiene.is_standalone_placeholder(term)],
                 )
             con.executemany(
                 "INSERT INTO entity_identifiers(page_id,system,identifier,term,source_kind,source_heading,raw_text) "
@@ -740,17 +756,18 @@ def rebuild_sqlite_search(con: sqlite3.Connection) -> None:
 
 def refresh_local(path: Path) -> dict:
     refs, hashes = reference_rows()
-    recovery_manifest = term_recovery.load_manifest()
-    hashes.update(term_recovery.reference_hashes(recovery_manifest))
+    official_refs, official_hashes = term_pipeline.read_references()
+    hashes.update(official_hashes)
     clean = companion("clean_term").clean
     stamp = datetime.now(timezone.utc).isoformat()
     with closing(connect_sqlite(path)) as con:
         migrate_sqlite(con)
-        recovery_reviews = term_recovery.snapshot_reviews(con)
         with con:
             section_report = backfill_sections(con)
-            pruned_empty_sections = prune_empty_entity_sections(con)
             for table in reversed(DERIVED):
+                if table in ("entity_pages", "entity_codes", "entity_related_terms",
+                             *term_recovery.TABLES, "page_term_mentions", *term_pipeline.TABLES):
+                    continue
                 con.execute(f'DELETE FROM "{table}"')
             for table, rows in refs.items():
                 _insert(con, table, columns(con, table), rows)
@@ -760,9 +777,10 @@ def refresh_local(path: Path) -> dict:
                  for page_id, title, subtitle in con.execute("SELECT page_id,title,subtitle FROM pages")],
             )
             _entities(con, stamp)
-            recovery_result = term_recovery.populate(con, recovery_manifest, recovery_reviews)
+            pruned_empty_sections = prune_empty_entity_sections(con)
             _codes(con)
-            _evidence(con)
+            term_hygiene.refresh_terms(con)
+            recovery_result = term_pipeline.run(con, official_refs)
             term_hygiene.refresh_terms(con)
             term_hygiene.validate_terms(con)
             build_documents(con)
@@ -770,6 +788,7 @@ def refresh_local(path: Path) -> dict:
             violations = con.execute("PRAGMA foreign_key_check").fetchall()
             if violations:
                 raise ValueError(f"SQLite FK violations: {violations[:5]}")
+        term_pipeline.ensure_views(con)
         result = {"version": VERSION, "completed_at": stamp, "reference_hashes": hashes,
                   "counts": inventory(con), "corpus_hashes": corpus_hashes(con),
                   "section_recovery": section_report,
@@ -951,12 +970,13 @@ def deploy_term_views(path: Path, server: str = "localhost", database: str = "Bl
                 view_checks[view] = len(a)
             for cursor, prefix in ((src, ""), (cur, "dbo.")):
                 duplicate = cursor.execute(
-                    "SELECT page_id,code_edition,morphology_code,TermUS,COUNT(*) "
-                    f"FROM {prefix}v_page_code_terms GROUP BY page_id,code_edition,morphology_code,TermUS "
+                    "SELECT page_id,code_edition,morphology_code,TermUS,candidateTermUS,COUNT(*) "
+                    f"FROM {prefix}v_page_code_terms "
+                    "GROUP BY page_id,code_edition,morphology_code,TermUS,candidateTermUS "
                     "HAVING COUNT(*)>1"
                 ).fetchone()
                 if duplicate:
-                    raise ValueError(f"Duplicate code-term pair: {duplicate}")
+                    raise ValueError(f"Duplicate code-term candidate row: {duplicate}")
             parity = verify_parity(src, cn)
             src.commit()
             cn.commit()
@@ -1208,6 +1228,17 @@ def _server_columns(cur, table: str) -> list[tuple]:
 
 
 def _server_type(name: str, kind: str, table: str | None = None) -> str:
+    if name in ("observation_key", "evaluation_key", "candidate_key", "decision_key",
+                "target_key", "reference_key", "reference_sha256", "evidence_hash",
+                "legacy_match_key"):
+        return "NVARCHAR(64)"
+    if name in ("edition", "matcher_version", "scope", "outcome", "context_class",
+                "term_origin", "extraction_tier", "evidence_tier"):
+        return "NVARCHAR(60)"
+    if name in ("candidateTermUS", "candidateTermNormUS"):
+        return "NVARCHAR(600)"
+    if name == "migration_key":
+        return "NVARCHAR(100)"
     if table == "books" and name == "alias":
         return "NVARCHAR(250)"
     if table in term_recovery.TABLES:
@@ -1401,7 +1432,7 @@ def ensure_server_schema(src: sqlite3.Connection, cn) -> None:
                         or (table == "entity_term_provenance" and name in ("TermUS", "TermNormUS"))
                         or (table in term_hygiene.TERM_SOURCES and name in term_hygiene.TERM_COLUMNS)
                         or (table == "page_icdo_codes" and name in ("term_role", "term_source", "line_indent"))
-                        or (table == "page_term_mentions" and name in ("url", "term_source", "extraction_method", "term_role", "code_origin", "parent_mention_id", "review_status", "reviewed_by"))
+                        or (table == "page_term_mentions" and name in ("url", "term_source", "extraction_method", "term_role", "code_origin", "parent_mention_id", "review_status", "reviewed_by", *term_pipeline.MENTION_COLUMNS))
                         or (table == "entity_codes" and name == "term_role")
                         or (table == "entity_related_terms" and name == "term_role")):
                     raise ValueError(f"Unexpected SQL Server schema drift: {table}.{name}")
@@ -1445,12 +1476,20 @@ def ensure_server_schema(src: sqlite3.Connection, cn) -> None:
             cols = [r[2] for r in src.execute(f'PRAGMA index_info("{name}")')]
             if name.startswith("sqlite_"):
                 name = f"ux_local_{table}_" + "_".join(cols)
-            if any(index_covers(i, cols, bool(index[2])) for i in indexes):
+            nullable_observation = table == "page_term_mentions" and cols == ["observation_key"]
+            if nullable_observation and any(
+                i["unique"] and i["keys"] == (("observation_key", False),)
+                and re.sub(r"[\s\[\]()]", "", i["filter"] or "").casefold() == "observation_keyisnotnull"
+                for i in indexes
+            ):
+                continue
+            if not nullable_observation and any(index_covers(i, cols, bool(index[2])) for i in indexes):
                 continue
             if any(i["name"] == name for i in indexes):
                 raise ValueError(f"Index definition drift: {table}.{name}")
             cur.execute(f"CREATE {'UNIQUE ' if index[2] else ''}INDEX [{name}] ON dbo.[{table}] (" +
-                        ",".join(f"[{c}]" for c in cols) + ")")
+                        ",".join(f"[{c}]" for c in cols) + ")" +
+                        (" WHERE [observation_key] IS NOT NULL" if nullable_observation else ""))
             indexes = server_indexes(cur, table)
     consolidate_server_indexes(cur)
     for table in TABLES:
@@ -1487,7 +1526,7 @@ def ensure_server_schema(src: sqlite3.Connection, cn) -> None:
                    for name in existing_names):
             name = _available_object_name(cur, base_name)
             cur.execute(f"ALTER TABLE dbo.[{table}] WITH CHECK ADD CONSTRAINT [{name}] CHECK ({check})")
-    for table, checks in term_recovery.server_checks().items():
+    for table, checks in (term_recovery.server_checks() | term_pipeline.server_checks()).items():
         for label, check in checks.items():
             name = f"ck_local_{table}_{label}"
             if not cur.execute(
@@ -1498,6 +1537,14 @@ def ensure_server_schema(src: sqlite3.Connection, cn) -> None:
     for batch in re.split(r"(?im)^\s*GO\s*$", term_recovery.view_sql(sqlserver=True)):
         if batch.strip():
             cur.execute(batch)
+    for batch in re.split(r"(?im)^\s*GO\s*$", term_pipeline.view_sql(sqlserver=True)):
+        if batch.strip():
+            cur.execute(batch)
+    cur.execute(
+        "CREATE OR ALTER TRIGGER dbo.tr_term_review_append_only ON dbo.term_review_decisions "
+        "INSTEAD OF UPDATE, DELETE AS BEGIN "
+        "THROW 51000, 'Review decisions are append-only', 1; END"
+    )
     cur.execute(
         "CREATE OR ALTER VIEW dbo.v_search AS SELECT s.section_id,s.page_id,s.heading,s.body_text,"
         "p.title,p.page_type,p.url,p.book_id,b.title AS book_title,b.edition "
@@ -1615,11 +1662,12 @@ def mirror(path: Path, server: str = "(local)", database: str = "BlueBooks",
                     unchanged.add(table)
             # Derived FK dependencies must be refreshed together.
             if any(t not in unchanged for t in DERIVED):
-                unchanged.difference_update(DERIVED)
+                unchanged.difference_update(t for t in DERIVED if t != "term_review_decisions")
             for table in reversed(TABLES):
                 # Preserve manual overlay and core corpus; canonical update/insert below.
                 if table not in unchanged and table not in ("cpc_curation", "books", "chapters", "page_groups", "pages",
-                                 "sections", "authors", "images", "page_links", "references"):
+                                 "sections", "authors", "images", "page_links", "references",
+                                 "term_review_decisions"):
                     cur.execute(f"DELETE FROM dbo.[{table}]")
             for table in TABLES:
                 if table in unchanged:
@@ -1632,7 +1680,7 @@ def mirror(path: Path, server: str = "(local)", database: str = "BlueBooks",
                 names = ",".join(f"[{c}]" for c in cols)
                 where = " WHERE book_id<>70" if table == "books" and not include_book70 else ""
                 rows = src.execute(f"SELECT {names} FROM [{table}]{where}")
-                retained = table not in DERIVED
+                retained = table not in DERIVED or table == "term_review_decisions"
                 if identity:
                     cur.execute(f"SET IDENTITY_INSERT dbo.[{table}] ON")
                 try:
@@ -1649,9 +1697,11 @@ def mirror(path: Path, server: str = "(local)", database: str = "BlueBooks",
                             for i, (_, kind, _, _, _) in enumerate(meta):
                                 if kind in ("nvarchar", "varchar"):
                                     size = max((len(str(r[i])) for r in chunk if r[i] is not None), default=1)
-                                    bindings.append((pyodbc.SQL_WVARCHAR, max(size, 1), 0))
+                                    sql_type = pyodbc.SQL_WLONGVARCHAR if size > 4000 else pyodbc.SQL_WVARCHAR
+                                    bindings.append((sql_type, max(size, 1), 0))
                                 elif kind == "datetime2":
-                                    bindings.append((pyodbc.SQL_TYPE_TIMESTAMP, 27, 6))
+                                    # ISO text avoids driver-dependent datetime2 precision binding.
+                                    bindings.append((pyodbc.SQL_WVARCHAR, 27, 0))
                                 elif kind == "decimal":
                                     bindings.append((pyodbc.SQL_DECIMAL, 10, 2))
                                 else:
@@ -1659,7 +1709,7 @@ def mirror(path: Path, server: str = "(local)", database: str = "BlueBooks",
                             cur.setinputsizes(bindings)
                             cur.executemany(f"INSERT INTO dbo.[{table}] ({names}) VALUES (" +
                                             ",".join("?" for _ in cols) + ")", [
-                                                tuple(datetime.fromisoformat(v).replace(tzinfo=None)
+                                                tuple(datetime.fromisoformat(v).replace(tzinfo=None).isoformat(timespec="microseconds")
                                                       if meta[i][1] == "datetime2" and isinstance(v, str) else v
                                                       for i, v in enumerate(row)) for row in chunk
                                             ])
@@ -1669,11 +1719,11 @@ def mirror(path: Path, server: str = "(local)", database: str = "BlueBooks",
                         values = dict(zip(cols, row))
                         if retained and cur.execute(f"SELECT 1 FROM dbo.[{table}] WHERE {condition}",
                                                     *[values[c] for c in pk]).fetchone():
-                            if table == "cpc_curation":
+                            if table in ("cpc_curation", "term_review_decisions"):
                                 target = cur.execute(f"SELECT {names} FROM dbo.[{table}] WHERE {condition}",
                                                      *[values[c] for c in pk]).fetchone()
                                 if _row_bytes(target) != _row_bytes(row):
-                                    raise ValueError("Curation conflict: reconcile manually before mirroring")
+                                    raise ValueError(f"{table} conflict: reconcile manually before mirroring")
                             elif nonkey:
                                 target = cur.execute(f"SELECT {names} FROM dbo.[{table}] WHERE {condition}",
                                                      *[values[c] for c in pk]).fetchone()

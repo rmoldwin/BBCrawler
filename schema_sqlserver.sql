@@ -6,7 +6,7 @@ IF OBJECT_ID('dbo.books','U') IS NULL
 CREATE TABLE dbo.[books] (
   [book_id] INT NOT NULL,
   [title] NVARCHAR(MAX) NOT NULL,
-  [edition] NVARCHAR(MAX) NULL,
+  [edition] NVARCHAR(60) NULL,
   [series] NVARCHAR(MAX) NULL,
   [status] NVARCHAR(MAX) NULL,
   [url] NVARCHAR(1000) NOT NULL,
@@ -193,7 +193,7 @@ CREATE TABLE dbo.[entity_term_code_matches] (
   [match_id] INT NOT NULL,
   [match_key] NVARCHAR(64) NOT NULL,
   [provenance_id] INT NOT NULL,
-  [edition] NVARCHAR(40) NOT NULL,
+  [edition] NVARCHAR(60) NOT NULL,
   [code] NVARCHAR(40) NOT NULL,
   [official_term] NVARCHAR(600) NOT NULL,
   [match_type] NVARCHAR(60) NOT NULL,
@@ -346,7 +346,103 @@ CREATE TABLE dbo.[page_term_mentions] (
   [parent_mention_id] INT NULL,
   [review_status] NVARCHAR(60) NULL,
   [reviewed_by] NVARCHAR(60) NULL,
+  [observation_key] NVARCHAR(64) NULL,
+  [source_locator] NVARCHAR(MAX) NULL,
+  [term_origin] NVARCHAR(60) NULL,
+  [context_class] NVARCHAR(60) NULL,
+  [evidence_hash] NVARCHAR(64) NULL,
+  [extraction_tier] NVARCHAR(60) NULL,
+  [is_current] INT NULL,
   PRIMARY KEY ([mention_id])
+);
+GO
+
+IF OBJECT_ID('dbo.term_saved_sections','U') IS NULL
+CREATE TABLE dbo.[term_saved_sections] (
+  [page_id] INT NOT NULL,
+  [source_sha256] NVARCHAR(MAX) NOT NULL,
+  [parser_version] NVARCHAR(MAX) NOT NULL,
+  [sections_json] NVARCHAR(MAX) NOT NULL,
+  PRIMARY KEY ([page_id])
+);
+GO
+
+IF OBJECT_ID('dbo.term_reference_rows','U') IS NULL
+CREATE TABLE dbo.[term_reference_rows] (
+  [reference_key] NVARCHAR(64) NOT NULL,
+  [edition] NVARCHAR(60) NOT NULL,
+  [reference_file] NVARCHAR(MAX) NOT NULL,
+  [reference_sha256] NVARCHAR(64) NOT NULL,
+  [reference_sheet] NVARCHAR(MAX) NOT NULL,
+  [reference_row] INT NOT NULL,
+  [code] NVARCHAR(40) NOT NULL,
+  [official_term] NVARCHAR(MAX) NOT NULL,
+  [official_termUS] NVARCHAR(MAX) NOT NULL,
+  [official_termNormUS] NVARCHAR(600) NOT NULL,
+  [level] NVARCHAR(MAX) NULL,
+  [conditions] NVARCHAR(MAX) NULL,
+  PRIMARY KEY ([reference_key])
+);
+GO
+
+IF OBJECT_ID('dbo.term_lookup_evaluations','U') IS NULL
+CREATE TABLE dbo.[term_lookup_evaluations] (
+  [evaluation_id] INT NOT NULL,
+  [evaluation_key] NVARCHAR(64) NOT NULL,
+  [mention_id] INT NOT NULL,
+  [edition] NVARCHAR(60) NOT NULL,
+  [reference_sha256] NVARCHAR(64) NOT NULL,
+  [matcher_version] NVARCHAR(60) NOT NULL,
+  [evidence_hash] NVARCHAR(64) NOT NULL,
+  [outcome] NVARCHAR(60) NOT NULL,
+  [detail] NVARCHAR(MAX) NOT NULL,
+  [evaluated_at] DATETIME2 NOT NULL,
+  [is_current] INT NOT NULL DEFAULT 1,
+  PRIMARY KEY ([evaluation_id])
+);
+GO
+
+IF OBJECT_ID('dbo.term_code_candidates','U') IS NULL
+CREATE TABLE dbo.[term_code_candidates] (
+  [candidate_id] INT NOT NULL,
+  [candidate_key] NVARCHAR(64) NOT NULL,
+  [evaluation_id] INT NOT NULL,
+  [code] NVARCHAR(40) NOT NULL,
+  [official_term] NVARCHAR(MAX) NOT NULL,
+  [candidateTermUS] NVARCHAR(600) NOT NULL,
+  [candidateTermNormUS] NVARCHAR(600) NOT NULL,
+  [match_type] NVARCHAR(MAX) NOT NULL,
+  [evidence_tier] NVARCHAR(60) NOT NULL,
+  [candidate_order] INT NOT NULL,
+  [conditions] NVARCHAR(MAX) NULL,
+  [reference_evidence] NVARCHAR(MAX) NOT NULL,
+  [review_status] NVARCHAR(60) NOT NULL,
+  [legacy_match_key] NVARCHAR(64) NULL,
+  PRIMARY KEY ([candidate_id])
+);
+GO
+
+IF OBJECT_ID('dbo.term_review_decisions','U') IS NULL
+CREATE TABLE dbo.[term_review_decisions] (
+  [decision_id] INT NOT NULL,
+  [decision_key] NVARCHAR(64) NOT NULL,
+  [target_key] NVARCHAR(64) NOT NULL,
+  [scope] NVARCHAR(60) NOT NULL,
+  [outcome] NVARCHAR(60) NOT NULL,
+  [reason] NVARCHAR(MAX) NOT NULL,
+  [evidence_hash] NVARCHAR(64) NOT NULL,
+  [reviewer] NVARCHAR(MAX) NULL,
+  [decided_at] DATETIME2 NOT NULL,
+  PRIMARY KEY ([decision_id])
+);
+GO
+
+IF OBJECT_ID('dbo.term_pipeline_migrations','U') IS NULL
+CREATE TABLE dbo.[term_pipeline_migrations] (
+  [migration_key] NVARCHAR(100) NOT NULL,
+  [applied_at] DATETIME2 NOT NULL,
+  [imported_rows] INT NOT NULL,
+  PRIMARY KEY ([migration_key])
 );
 GO
 
@@ -630,6 +726,12 @@ GO
 IF NOT EXISTS(SELECT 1 FROM sys.foreign_key_columns WHERE parent_object_id=OBJECT_ID('dbo.page_icdo_codes') AND referenced_object_id=OBJECT_ID('dbo.pages') AND COL_NAME(parent_object_id,parent_column_id)='page_id' AND COL_NAME(referenced_object_id,referenced_column_id)='page_id')
 ALTER TABLE dbo.[page_icdo_codes] WITH CHECK ADD CONSTRAINT [fk_local_page_icdo_codes_page_id_pages] FOREIGN KEY ([page_id]) REFERENCES dbo.[pages] ([page_id]);
 GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.page_term_mentions') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=2 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='page_id') AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=2 AND ic.is_descending_key=0 AND c.name='TermNormUS'))
+CREATE INDEX [ix_term_observation_page_norm] ON dbo.[page_term_mentions] ([page_id],[TermNormUS]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.page_term_mentions') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=1 AND i.filter_definition LIKE '%observation_key%IS NOT NULL%' AND i.is_unique=1 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='observation_key'))
+CREATE UNIQUE INDEX [ux_term_observation] ON dbo.[page_term_mentions] ([observation_key]) WHERE [observation_key] IS NOT NULL;
+GO
 IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.page_term_mentions') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='TermNormUS'))
 CREATE INDEX [ix_page_term_mentions_TermNormUS] ON dbo.[page_term_mentions] ([TermNormUS]);
 GO
@@ -653,6 +755,42 @@ CREATE INDEX [ix_page_term_mentions_clean] ON dbo.[page_term_mentions] ([term_cl
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.foreign_key_columns WHERE parent_object_id=OBJECT_ID('dbo.page_term_mentions') AND referenced_object_id=OBJECT_ID('dbo.pages') AND COL_NAME(parent_object_id,parent_column_id)='page_id' AND COL_NAME(referenced_object_id,referenced_column_id)='page_id')
 ALTER TABLE dbo.[page_term_mentions] WITH CHECK ADD CONSTRAINT [fk_local_page_term_mentions_page_id_pages] FOREIGN KEY ([page_id]) REFERENCES dbo.[pages] ([page_id]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.foreign_key_columns WHERE parent_object_id=OBJECT_ID('dbo.term_saved_sections') AND referenced_object_id=OBJECT_ID('dbo.pages') AND COL_NAME(parent_object_id,parent_column_id)='page_id' AND COL_NAME(referenced_object_id,referenced_column_id)='page_id')
+ALTER TABLE dbo.[term_saved_sections] WITH CHECK ADD CONSTRAINT [fk_local_term_saved_sections_page_id_pages] FOREIGN KEY ([page_id]) REFERENCES dbo.[pages] ([page_id]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_reference_rows') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=2 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='edition') AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=2 AND ic.is_descending_key=0 AND c.name='code'))
+CREATE INDEX [ix_term_reference_code] ON dbo.[term_reference_rows] ([edition],[code]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_reference_rows') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=2 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='edition') AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=2 AND ic.is_descending_key=0 AND c.name='official_termNormUS'))
+CREATE INDEX [ix_term_reference_norm] ON dbo.[term_reference_rows] ([edition],[official_termNormUS]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=3 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='mention_id') AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=2 AND ic.is_descending_key=0 AND c.name='edition') AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=3 AND ic.is_descending_key=0 AND c.name='is_current'))
+CREATE INDEX [ix_term_evaluation_observation] ON dbo.[term_lookup_evaluations] ([mention_id],[edition],[is_current]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND i.is_unique=1 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='evaluation_key'))
+CREATE UNIQUE INDEX [ux_local_term_lookup_evaluations_evaluation_key] ON dbo.[term_lookup_evaluations] ([evaluation_key]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.foreign_key_columns WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND referenced_object_id=OBJECT_ID('dbo.page_term_mentions') AND COL_NAME(parent_object_id,parent_column_id)='mention_id' AND COL_NAME(referenced_object_id,referenced_column_id)='mention_id')
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [fk_local_term_lookup_evaluations_mention_id_page_term_mentions] FOREIGN KEY ([mention_id]) REFERENCES dbo.[page_term_mentions] ([mention_id]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_code_candidates') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=2 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='review_status') AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=2 AND ic.is_descending_key=0 AND c.name='evaluation_id'))
+CREATE INDEX [ix_term_candidate_review] ON dbo.[term_code_candidates] ([review_status],[evaluation_id]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_code_candidates') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='evaluation_id'))
+CREATE INDEX [ix_term_candidate_evaluation] ON dbo.[term_code_candidates] ([evaluation_id]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_code_candidates') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND i.is_unique=1 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='candidate_key'))
+CREATE UNIQUE INDEX [ux_local_term_code_candidates_candidate_key] ON dbo.[term_code_candidates] ([candidate_key]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.foreign_key_columns WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND referenced_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND COL_NAME(parent_object_id,parent_column_id)='evaluation_id' AND COL_NAME(referenced_object_id,referenced_column_id)='evaluation_id')
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [fk_local_term_code_candidates_evaluation_id_term_lookup_evaluations] FOREIGN KEY ([evaluation_id]) REFERENCES dbo.[term_lookup_evaluations] ([evaluation_id]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_review_decisions') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=2 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='target_key') AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=2 AND ic.is_descending_key=0 AND c.name='decision_id'))
+CREATE INDEX [ix_term_review_target] ON dbo.[term_review_decisions] ([target_key],[decision_id]);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.term_review_decisions') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND i.is_unique=1 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='decision_key'))
+CREATE UNIQUE INDEX [ux_local_term_review_decisions_decision_key] ON dbo.[term_review_decisions] ([decision_key]);
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.indexes i WHERE i.object_id=OBJECT_ID('dbo.page_site_hints') AND i.type IN (1,2) AND i.is_disabled=0 AND i.has_filter=0 AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal>0)=1 AND EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE ic.object_id=i.object_id AND ic.index_id=i.index_id AND ic.key_ordinal=1 AND ic.is_descending_key=0 AND c.name='c_code'))
 CREATE INDEX [ix_page_site_hints_code] ON dbo.[page_site_hints] ([c_code]);
@@ -1041,3378 +1179,1691 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE OR ALTER FUNCTION [dbo].[Clean2]
-
 -- =============================================
-
 -- Author:      Moldwin, Richard
-
 -- Version:     3.0.2 (2026-10-08). Check with SELECT dbo.Clean2Version().
-
 -- Create Date: 2026 Sep 28. Successor to dbo.Clean (2022 Aug 29 ... 2026-07-09).
-
 --              GENERATED from clean2.py - edit the rules there and regenerate,
-
 --              so SQL and Python stay identical.
-
 -- Description: Comparison-key normalizer. Use as
-
 --                  dbo.Clean2(dbo.CleanBritishSpelling2(Term))
-
 --              Drops commas, NOS and the word 'type'; '/' and dashes become
-
 --              spaces ('::' too); grade/type/acronym Roman numerals become
-
 --              digits; 'non X' and bound prefixes (micro, pre, ...) join;
-
 --              every minus sign is kept and written as U+2212 MINUS SIGN ('ALK-)', '5q-)');
-
 --              karyotypes closed up ('del(5q)');
-
 --              possessive 's dropped. Never changes letter case. Word rules
-
 --              match whole words only. Not display text.
-
 --   v3:        lowercase articles the/a/an removed (case-sensitive, guarded);
-
 --              numerals before ';' ':'; no space before ';' ':'; trailing ';' ':'
-
 --              dropped; 'pre-pre-B' -> 'prepreB'; Greek letters -> names;
-
 --              '&' -> 'and'; double/special quotes -> straight single quote.
-
 --
-
 --   vs dbo.Clean:  no British spelling (it lives in CleanBritishSpelling2);
-
 --   special characters from the same tables as CleanBritishSpelling2;
-
 --   exact case-sensitive matching (BIN2) throughout; whole-word NOS/type/non,
-
 --   so 'nose', 'types' and 'Canon' are safe; numerals also at the end of a
-
 --   closing parenthetical, plus grade/type IV; apostrophe look-alikes; a
-
 --   trailing period dropped. No loops, a single RETURN, every statement but
-
 --   the first reads @s once, and consecutive replacements are nested into
-
 --   few statements - so SQL Server actually inlines it.
-
 -- =============================================
-
 --
-
 --   NVARCHAR(4000), not MAX: MAX strings are handled as large objects, and with
-
 --   ~370 replacements per call that made Clean2 ~10x slower (3.7 s vs 0.4 s for
-
 --   the 5,709 terms of CPC_MorphCodeList_2026Jul28). Terms are nvarchar(255).
-
 --   An input longer than 4,000 characters would be truncated.
-
 (
-
     @StringIn NVARCHAR(4000)
-
 )
-
 RETURNS NVARCHAR(4000)
-
 WITH SCHEMABINDING
-
 AS
-
 BEGIN
-
     -- A variable does not keep a collation, so every comparison below names
-
     -- BIN2 explicitly: exact code points, case-sensitive, no linguistic
-
     -- expansions (under a linguistic collation 'ß' matches 'ss').
-
     -- NULL flows through every step as NULL; there is a single RETURN.
-
     DECLARE @s NVARCHAR(4000) = @StringIn;
 
-
-
     -- 0. Everything from '(specify' onward is dropped (as dbo.Clean). First, because it is the one step that must read the string twice - done here it costs nothing
-
     SET @s = REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'(Specify', N'(specify')
-
         , N'(SPECIFY', N'(specify');
-
     SET @s = LEFT(@s, CHARINDEX(N'(specify', (@s + N'(specify') COLLATE Latin1_General_100_BIN2) - 1);
 
-
-
     -- 1. Special characters - the SAME tables as dbo.CleanBritishSpelling2
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(8203), N'')  -- U+200B ZERO WIDTH SPACE
-
         , NCHAR(8204), N'')  -- U+200C ZERO WIDTH NON-JOINER
-
         , NCHAR(8205), N'')  -- U+200D ZERO WIDTH JOINER
-
         , NCHAR(8288), N'')  -- U+2060 WORD JOINER
-
         , NCHAR(65279), N'')  -- U+FEFF ZERO WIDTH NO-BREAK SPACE
-
         , NCHAR(173), N'')  -- U+00AD SOFT HYPHEN
-
         , NCHAR(8206), N'')  -- U+200E LEFT-TO-RIGHT MARK
-
         , NCHAR(8207), N'')  -- U+200F RIGHT-TO-LEFT MARK
-
         , NCHAR(8234), N'')  -- U+202A LEFT-TO-RIGHT EMBEDDING
-
         , NCHAR(8235), N'')  -- U+202B RIGHT-TO-LEFT EMBEDDING
-
         , NCHAR(8236), N'')  -- U+202C POP DIRECTIONAL FORMATTING
-
         , NCHAR(8237), N'')  -- U+202D LEFT-TO-RIGHT OVERRIDE
-
         , NCHAR(8238), N'')  -- U+202E RIGHT-TO-LEFT OVERRIDE
-
         , NCHAR(8294), N'')  -- U+2066 LEFT-TO-RIGHT ISOLATE
-
         , NCHAR(8295), N'')  -- U+2067 RIGHT-TO-LEFT ISOLATE
-
         , NCHAR(8296), N'')  -- U+2068 FIRST STRONG ISOLATE
-
         , NCHAR(8297), N'')  -- U+2069 POP DIRECTIONAL ISOLATE
-
         , NCHAR(9), N' ')  -- U+0009 CHARACTER TABULATION
-
         , NCHAR(10), N' ')  -- U+000A LINE FEED
-
         , NCHAR(13), N' ')  -- U+000D CARRIAGE RETURN
-
         , NCHAR(160), N' ')  -- U+00A0 NO-BREAK SPACE
-
         , NCHAR(8194), N' ')  -- U+2002 EN SPACE
-
         , NCHAR(8195), N' ')  -- U+2003 EM SPACE
-
         , NCHAR(8196), N' ')  -- U+2004 THREE-PER-EM SPACE
-
         , NCHAR(8197), N' ')  -- U+2005 FOUR-PER-EM SPACE
-
         , NCHAR(8198), N' ')  -- U+2006 SIX-PER-EM SPACE
-
         , NCHAR(8199), N' ')  -- U+2007 FIGURE SPACE
-
         , NCHAR(8200), N' ')  -- U+2008 PUNCTUATION SPACE
-
         , NCHAR(8201), N' ')  -- U+2009 THIN SPACE
-
         , NCHAR(8202), N' ');  -- U+200A HAIR SPACE
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(8239), N' ')  -- U+202F NARROW NO-BREAK SPACE
-
         , NCHAR(8287), N' ')  -- U+205F MEDIUM MATHEMATICAL SPACE
-
         , NCHAR(12288), N' ')  -- U+3000 IDEOGRAPHIC SPACE
-
         , NCHAR(8208), N'-')  -- U+2010 HYPHEN
-
         , NCHAR(8209), N'-')  -- U+2011 NON-BREAKING HYPHEN
-
         , NCHAR(8210), N'-')  -- U+2012 FIGURE DASH
-
         , NCHAR(8211), N'-')  -- U+2013 EN DASH
-
         , NCHAR(8212), N'-')  -- U+2014 EM DASH
-
         , NCHAR(8213), N'-')  -- U+2015 HORIZONTAL BAR
-
         , NCHAR(65112), N'-')  -- U+FE58 SMALL EM DASH
-
         , NCHAR(65123), N'-')  -- U+FE63 SMALL HYPHEN-MINUS
-
         , NCHAR(65293), N'-')  -- U+FF0D FULLWIDTH HYPHEN-MINUS
-
         , NCHAR(223), NCHAR(946))  -- U+00DF LATIN SMALL LETTER SHARP S, U+03B2 GREEK SMALL LETTER BETA
-
         , NCHAR(230), N'ae')  -- U+00E6 LATIN SMALL LETTER AE
-
         , NCHAR(198), N'Ae')  -- U+00C6 LATIN CAPITAL LETTER AE
-
         , NCHAR(339), N'oe')  -- U+0153 LATIN SMALL LIGATURE OE
-
         , NCHAR(338), N'Oe');  -- U+0152 LATIN CAPITAL LIGATURE OE
 
-
-
     -- 2. Remaining control characters removed (so the sentinels and markers used in steps 6 and 9e cannot occur in the input)
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(1), N'')  -- U+0001 control character
-
         , NCHAR(2), N'')  -- U+0002 start sentinel
-
         , NCHAR(3), N'')  -- U+0003 end sentinel
-
         , NCHAR(4), N'')  -- U+0004 control character
-
         , NCHAR(5), N'')  -- U+0005 control character
-
         , NCHAR(6), N'')  -- U+0006 control character
-
         , NCHAR(7), N'')  -- U+0007 BELL
-
         , NCHAR(8), N'')  -- U+0008 control character
-
         , NCHAR(11), N'')  -- U+000B control character
-
         , NCHAR(12), N'')  -- U+000C control character
-
         , NCHAR(14), N'')  -- U+000E control character
-
         , NCHAR(15), N'')  -- U+000F control character
-
         , NCHAR(16), N'')  -- U+0010 control character
-
         , NCHAR(17), N'')  -- U+0011 control character
-
         , NCHAR(18), N'')  -- U+0012 control character
-
         , NCHAR(19), N'')  -- U+0013 control character
-
         , NCHAR(20), N'')  -- U+0014 control character
-
         , NCHAR(21), N'')  -- U+0015 control character
-
         , NCHAR(22), N'')  -- U+0016 control character
-
         , NCHAR(23), N'')  -- U+0017 control character
-
         , NCHAR(24), N'')  -- U+0018 control character
-
         , NCHAR(25), N'')  -- U+0019 control character
-
         , NCHAR(26), N'')  -- U+001A control character
-
         , NCHAR(27), N'')  -- U+001B control character
-
         , NCHAR(28), N'')  -- U+001C control character
-
         , NCHAR(29), N'')  -- U+001D control character
-
         , NCHAR(30), N'')  -- U+001E control character
-
         , NCHAR(31), N'')  -- U+001F control character
-
         , NCHAR(127), N'');  -- U+007F control character
 
-
-
     -- 3. Apostrophe look-alikes, and (v3 R8) double and other special quotation marks, read as the ASCII apostrophe / straight single quote
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(8217), N'''')  -- U+2019 RIGHT SINGLE QUOTATION MARK
-
         , NCHAR(8216), N'''')  -- U+2018 LEFT SINGLE QUOTATION MARK
-
         , NCHAR(8219), N'''')  -- U+201B SINGLE HIGH-REVERSED-9 QUOTATION MARK
-
         , NCHAR(700), N'''')  -- U+02BC MODIFIER LETTER APOSTROPHE
-
         , NCHAR(697), N'''')  -- U+02B9 MODIFIER LETTER PRIME
-
         , N'`', N'''')
-
         , NCHAR(180), N'''')  -- U+00B4 ACUTE ACCENT
-
         , NCHAR(8242), N'''')  -- U+2032 PRIME
-
         , NCHAR(65287), N'''')  -- U+FF07 FULLWIDTH APOSTROPHE
-
         , N'"', N'''')
-
         , NCHAR(8220), N'''')  -- U+201C LEFT DOUBLE QUOTATION MARK
-
         , NCHAR(8221), N'''')  -- U+201D RIGHT DOUBLE QUOTATION MARK
-
         , NCHAR(8222), N'''')  -- U+201E DOUBLE LOW-9 QUOTATION MARK
-
         , NCHAR(8223), N'''')  -- U+201F DOUBLE HIGH-REVERSED-9 QUOTATION MARK
-
         , NCHAR(8218), N'''')  -- U+201A SINGLE LOW-9 QUOTATION MARK
-
         , NCHAR(171), N'''')  -- U+00AB LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
-
         , NCHAR(187), N'''')  -- U+00BB RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
-
         , NCHAR(8249), N'''')  -- U+2039 SINGLE LEFT-POINTING ANGLE QUOTATION MARK
-
         , NCHAR(8250), N'''')  -- U+203A SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
-
         , NCHAR(12317), N'''')  -- U+301D REVERSED DOUBLE PRIME QUOTATION MARK
-
         , NCHAR(12318), N'''')  -- U+301E DOUBLE PRIME QUOTATION MARK
-
         , NCHAR(12319), N'''')  -- U+301F LOW DOUBLE PRIME QUOTATION MARK
-
         , NCHAR(65282), N'''');  -- U+FF02 FULLWIDTH QUOTATION MARK
 
-
-
     -- 3b. (v3 R6) Greek letters written as their names, a space on each side: 'β-catenin' = 'beta-catenin', 'γδ' = 'gamma-delta'. The extra spaces are collapsed in step 5
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(945), N' alpha ')  -- U+03B1 GREEK SMALL LETTER ALPHA
-
         , NCHAR(913), N' Alpha ')  -- U+0391 GREEK CAPITAL LETTER ALPHA
-
         , NCHAR(946), N' beta ')  -- U+03B2 GREEK SMALL LETTER BETA
-
         , NCHAR(914), N' Beta ')  -- U+0392 GREEK CAPITAL LETTER BETA
-
         , NCHAR(947), N' gamma ')  -- U+03B3 GREEK SMALL LETTER GAMMA
-
         , NCHAR(915), N' Gamma ')  -- U+0393 GREEK CAPITAL LETTER GAMMA
-
         , NCHAR(948), N' delta ')  -- U+03B4 GREEK SMALL LETTER DELTA
-
         , NCHAR(916), N' Delta ')  -- U+0394 GREEK CAPITAL LETTER DELTA
-
         , NCHAR(949), N' epsilon ')  -- U+03B5 GREEK SMALL LETTER EPSILON
-
         , NCHAR(917), N' Epsilon ')  -- U+0395 GREEK CAPITAL LETTER EPSILON
-
         , NCHAR(950), N' zeta ')  -- U+03B6 GREEK SMALL LETTER ZETA
-
         , NCHAR(918), N' Zeta ')  -- U+0396 GREEK CAPITAL LETTER ZETA
-
         , NCHAR(951), N' eta ')  -- U+03B7 GREEK SMALL LETTER ETA
-
         , NCHAR(919), N' Eta ')  -- U+0397 GREEK CAPITAL LETTER ETA
-
         , NCHAR(952), N' theta ')  -- U+03B8 GREEK SMALL LETTER THETA
-
         , NCHAR(920), N' Theta ')  -- U+0398 GREEK CAPITAL LETTER THETA
-
         , NCHAR(953), N' iota ')  -- U+03B9 GREEK SMALL LETTER IOTA
-
         , NCHAR(921), N' Iota ')  -- U+0399 GREEK CAPITAL LETTER IOTA
-
         , NCHAR(954), N' kappa ')  -- U+03BA GREEK SMALL LETTER KAPPA
-
         , NCHAR(922), N' Kappa ')  -- U+039A GREEK CAPITAL LETTER KAPPA
-
         , NCHAR(955), N' lambda ')  -- U+03BB GREEK SMALL LETTER LAMDA
-
         , NCHAR(923), N' Lambda ')  -- U+039B GREEK CAPITAL LETTER LAMDA
-
         , NCHAR(956), N' mu ')  -- U+03BC GREEK SMALL LETTER MU
-
         , NCHAR(924), N' Mu ')  -- U+039C GREEK CAPITAL LETTER MU
-
         , NCHAR(957), N' nu ')  -- U+03BD GREEK SMALL LETTER NU
-
         , NCHAR(925), N' Nu ')  -- U+039D GREEK CAPITAL LETTER NU
-
         , NCHAR(958), N' xi ')  -- U+03BE GREEK SMALL LETTER XI
-
         , NCHAR(926), N' Xi ')  -- U+039E GREEK CAPITAL LETTER XI
-
         , NCHAR(959), N' omicron ')  -- U+03BF GREEK SMALL LETTER OMICRON
-
         , NCHAR(927), N' Omicron ');  -- U+039F GREEK CAPITAL LETTER OMICRON
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(960), N' pi ')  -- U+03C0 GREEK SMALL LETTER PI
-
         , NCHAR(928), N' Pi ')  -- U+03A0 GREEK CAPITAL LETTER PI
-
         , NCHAR(961), N' rho ')  -- U+03C1 GREEK SMALL LETTER RHO
-
         , NCHAR(929), N' Rho ')  -- U+03A1 GREEK CAPITAL LETTER RHO
-
         , NCHAR(962), N' sigma ')  -- U+03C2 GREEK SMALL LETTER FINAL SIGMA
-
         , NCHAR(963), N' sigma ')  -- U+03C3 GREEK SMALL LETTER SIGMA
-
         , NCHAR(931), N' Sigma ')  -- U+03A3 GREEK CAPITAL LETTER SIGMA
-
         , NCHAR(964), N' tau ')  -- U+03C4 GREEK SMALL LETTER TAU
-
         , NCHAR(932), N' Tau ')  -- U+03A4 GREEK CAPITAL LETTER TAU
-
         , NCHAR(965), N' upsilon ')  -- U+03C5 GREEK SMALL LETTER UPSILON
-
         , NCHAR(933), N' Upsilon ')  -- U+03A5 GREEK CAPITAL LETTER UPSILON
-
         , NCHAR(966), N' phi ')  -- U+03C6 GREEK SMALL LETTER PHI
-
         , NCHAR(934), N' Phi ')  -- U+03A6 GREEK CAPITAL LETTER PHI
-
         , NCHAR(967), N' chi ')  -- U+03C7 GREEK SMALL LETTER CHI
-
         , NCHAR(935), N' Chi ')  -- U+03A7 GREEK CAPITAL LETTER CHI
-
         , NCHAR(968), N' psi ')  -- U+03C8 GREEK SMALL LETTER PSI
-
         , NCHAR(936), N' Psi ')  -- U+03A8 GREEK CAPITAL LETTER PSI
-
         , NCHAR(969), N' omega ')  -- U+03C9 GREEK SMALL LETTER OMEGA
-
         , NCHAR(937), N' Omega ');  -- U+03A9 GREEK CAPITAL LETTER OMEGA
 
-
-
     -- 3c. (v3 R7) '&' -> 'and'
-
     SET @s = REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'&', N' and ');
 
-
-
     -- 4. Punctuation: commas and '#' removed; '::' (gene fusion), '/' and '-' become spaces (every other dash is already '-'), except a minus sign - U+2212 anywhere, or '-' right before ')' - which is kept ('CD34− tumor', 'ALK-)', '5q-)'); a space is put before every '(' (karyotypes are closed up again in step 6b)
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N',', N'')
-
         , N'#', N'')
-
         , N'::', N' ')
-
         , N'/', N' ')
-
         , NCHAR(8722), NCHAR(14))  -- U+2212 MINUS SIGN, U+000E control character
-
         , N'-)', NCHAR(14) + N')')  -- U+000E control character
-
         , N'-', N' ')
-
         , N'(', N' (');
 
-
-
     -- 5. Tidy the ends: collapse spaces, trim, leading '+'/'?' (as dbo.Clean), trailing '.'
-
     -- collapse runs of spaces without a loop: BEL marks each space, 'BEL +
-
     -- space' pairs are dropped, then leftover marks. BEL cannot come from the
-
     -- input: step 2 removed every control character.
-
     SET @s = REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2, N' ', N' ' + NCHAR(7)), NCHAR(7) + N' ', N''), NCHAR(7), N'');  -- U+0007 BELL used as a marker
-
     SET @s = LTRIM(@s, N'+? ');
-
     SET @s = RTRIM(@s, N'. ');
 
-
-
     -- 6. Mark the start and end with sentinels U+0002 / U+0003 so a word at either end has a boundary to match against
-
     SET @s = NCHAR(2) + @s + NCHAR(3);  -- U+0002 start sentinel, U+0003 end sentinel
 
-
-
     -- 6b. Karyotype notation closed up again: 't (9;22)' 'del (5q)' -> 't(9;22)' 'del(5q)'; and ') (p' / ') (q' -> ')(p' / ')(q': 'inv(16) (p13;q22)' -> 'inv(16)(p13;q22)'
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' t (', N' t(')
-
         , N'(t (', N'(t(')
-
         , N'+t (', N'+t(')
-
         , N';t (', N';t(')
-
         , NCHAR(2) + N't (', NCHAR(2) + N't(')  -- U+0002 start sentinel
-
         , N' inv (', N' inv(')
-
         , N'(inv (', N'(inv(')
-
         , N'+inv (', N'+inv(')
-
         , N';inv (', N';inv(')
-
         , NCHAR(2) + N'inv (', NCHAR(2) + N'inv(')  -- U+0002 start sentinel
-
         , N' del (', N' del(')
-
         , N'(del (', N'(del(')
-
         , N'+del (', N'+del(')
-
         , N';del (', N';del(')
-
         , NCHAR(2) + N'del (', NCHAR(2) + N'del(')  -- U+0002 start sentinel
-
         , N' der (', N' der(')
-
         , N'(der (', N'(der(')
-
         , N'+der (', N'+der(')
-
         , N';der (', N';der(')
-
         , NCHAR(2) + N'der (', NCHAR(2) + N'der(')  -- U+0002 start sentinel
-
         , N' dup (', N' dup(')
-
         , N'(dup (', N'(dup(')
-
         , N'+dup (', N'+dup(')
-
         , N';dup (', N';dup(')
-
         , NCHAR(2) + N'dup (', NCHAR(2) + N'dup(')  -- U+0002 start sentinel
-
         , N' ins (', N' ins(')
-
         , N'(ins (', N'(ins(')
-
         , N'+ins (', N'+ins(')
-
         , N';ins (', N';ins(')
-
         , NCHAR(2) + N'ins (', NCHAR(2) + N'ins(');  -- U+0002 start sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' i (', N' i(')
-
         , N'(i (', N'(i(')
-
         , N'+i (', N'+i(')
-
         , N';i (', N';i(')
-
         , NCHAR(2) + N'i (', NCHAR(2) + N'i(')  -- U+0002 start sentinel
-
         , N' add (', N' add(')
-
         , N'(add (', N'(add(')
-
         , N'+add (', N'+add(')
-
         , N';add (', N';add(')
-
         , NCHAR(2) + N'add (', NCHAR(2) + N'add(')  -- U+0002 start sentinel
-
         , N' idic (', N' idic(')
-
         , N'(idic (', N'(idic(')
-
         , N'+idic (', N'+idic(')
-
         , N';idic (', N';idic(')
-
         , NCHAR(2) + N'idic (', NCHAR(2) + N'idic(')  -- U+0002 start sentinel
-
         , N') (p', N')(p')
-
         , N') (q', N')(q');
 
-
-
     -- 7. Possessive 's dropped at a word end: "Paget's disease" = "Paget disease"
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'''s ', N' ')
-
         , N'''s)', N')')
-
         , N'''s]', N']')
-
         , N'''s}', N'}')
-
         , N'''s:', N':')
-
         , N'''s;', N';')
-
         , N'''s' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N'''s ', N' ')
-
         , N'''s)', N')')
-
         , N'''s]', N']')
-
         , N'''s}', N'}')
-
         , N'''s:', N':')
-
         , N'''s;', N';')
-
         , N'''s' + NCHAR(3), NCHAR(3));  -- U+0003 end sentinel
 
-
-
     -- 8. NOS removed - uppercase whole word only (never inside adenosquamous, nose ...). Before the numerals, so 'CIN III, NOS' ends in its numeral
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' NOS ', N' ')
-
         , N' NOS)', N')')
-
         , N' NOS]', N']')
-
         , N' NOS}', N'}')
-
         , N' NOS:', N':')
-
         , N' NOS;', N';')
-
         , N' NOS' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N'(NOS ', N'(')
-
         , N'(NOS)', N'')
-
         , N'(NOS]', N'(]')
-
         , N'(NOS}', N'(}')
-
         , N'(NOS:', N'(:')
-
         , N'(NOS;', N'(;')
-
         , N'(NOS' + NCHAR(3), N'(' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'[NOS ', N'[')
-
         , N'[NOS)', N'[)')
-
         , N'[NOS]', N'')
-
         , N'[NOS}', N'[}')
-
         , N'[NOS:', N'[:')
-
         , N'[NOS;', N'[;')
-
         , N'[NOS' + NCHAR(3), N'[' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'{NOS ', N'{')
-
         , N'{NOS)', N'{)')
-
         , N'{NOS]', N'{]')
-
         , N'{NOS}', N'')
-
         , N'{NOS:', N'{:')
-
         , N'{NOS;', N'{;')
-
         , N'{NOS' + NCHAR(3), N'{' + NCHAR(3))  -- U+0003 end sentinel
-
         , N':NOS ', N':')
-
         , N':NOS)', N':)');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N':NOS]', N':]')
-
         , N':NOS}', N':}')
-
         , N':NOS:', N'::')
-
         , N':NOS;', N':;')
-
         , N':NOS' + NCHAR(3), N':' + NCHAR(3))  -- U+0003 end sentinel
-
         , N';NOS ', N';')
-
         , N';NOS)', N';)')
-
         , N';NOS]', N';]')
-
         , N';NOS}', N';}')
-
         , N';NOS:', N';:')
-
         , N';NOS;', N';;')
-
         , N';NOS' + NCHAR(3), N';' + NCHAR(3))  -- U+0003 end sentinel
-
         , NCHAR(2) + N'NOS ', NCHAR(2))  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS)', NCHAR(2) + N')')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS]', NCHAR(2) + N']')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS}', NCHAR(2) + N'}')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS:', NCHAR(2) + N':')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS;', NCHAR(2) + N';')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS' + NCHAR(3), NCHAR(2) + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , N' NOS ', N' ')
-
         , N' NOS)', N')')
-
         , N' NOS]', N']')
-
         , N' NOS}', N'}')
-
         , N' NOS:', N':')
-
         , N' NOS;', N';')
-
         , N' NOS' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N'(NOS ', N'(')
-
         , N'(NOS)', N'')
-
         , N'(NOS]', N'(]')
-
         , N'(NOS}', N'(}');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'(NOS:', N'(:')
-
         , N'(NOS;', N'(;')
-
         , N'(NOS' + NCHAR(3), N'(' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'[NOS ', N'[')
-
         , N'[NOS)', N'[)')
-
         , N'[NOS]', N'')
-
         , N'[NOS}', N'[}')
-
         , N'[NOS:', N'[:')
-
         , N'[NOS;', N'[;')
-
         , N'[NOS' + NCHAR(3), N'[' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'{NOS ', N'{')
-
         , N'{NOS)', N'{)')
-
         , N'{NOS]', N'{]')
-
         , N'{NOS}', N'')
-
         , N'{NOS:', N'{:')
-
         , N'{NOS;', N'{;')
-
         , N'{NOS' + NCHAR(3), N'{' + NCHAR(3))  -- U+0003 end sentinel
-
         , N':NOS ', N':')
-
         , N':NOS)', N':)')
-
         , N':NOS]', N':]')
-
         , N':NOS}', N':}')
-
         , N':NOS:', N'::')
-
         , N':NOS;', N':;')
-
         , N':NOS' + NCHAR(3), N':' + NCHAR(3))  -- U+0003 end sentinel
-
         , N';NOS ', N';')
-
         , N';NOS)', N';)')
-
         , N';NOS]', N';]')
-
         , N';NOS}', N';}')
-
         , N';NOS:', N';:')
-
         , N';NOS;', N';;');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N';NOS' + NCHAR(3), N';' + NCHAR(3))  -- U+0003 end sentinel
-
         , NCHAR(2) + N'NOS ', NCHAR(2))  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS)', NCHAR(2) + N')')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS]', NCHAR(2) + N']')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS}', NCHAR(2) + N'}')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS:', NCHAR(2) + N':')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS;', NCHAR(2) + N';')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'NOS' + NCHAR(3), NCHAR(2) + NCHAR(3));  -- U+0002 start sentinel, U+0003 end sentinel
 
-
-
     -- 8b. Close up the space a removal can leave next to the start/end sentinel, so a numeral exposed by it is still recognised as trailing
-
     SET @s = REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' ' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , NCHAR(2) + N' ', NCHAR(2));  -- U+0002 start sentinel
-
     -- collapse runs of spaces without a loop: BEL marks each space, 'BEL +
-
     -- space' pairs are dropped, then leftover marks. BEL cannot come from the
-
     -- input: step 2 removed every control character.
-
     SET @s = REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2, N' ', N' ' + NCHAR(7)), NCHAR(7) + N' ', N''), NCHAR(7), N'');  -- U+0007 BELL used as a marker
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N': :', N':')
-
         , N' ;', N';')
-
         , N' :', N':')
-
         , N'::', N':');
-
-
 
     -- 8c. (v3 R1) Articles: lowercase whole words 'the', 'a', 'an' removed - never the first or last word, and 'a'/'an' kept after a label word ('type a', 'hepatitis a'). Case-sensitive: 'A' (type A, group A) is never touched. Before step 9, so 'type a' is still recognisable
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'type a ', N'type ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'type a)', N'type ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'type a;', N'type ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'type a:', N'type ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'type a' + NCHAR(3), N'type ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'type an ', N'type ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'type an)', N'type ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'type an;', N'type ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'type an:', N'type ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'type an' + NCHAR(3), N'type ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Type a ', N'Type ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Type a)', N'Type ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Type a;', N'Type ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Type a:', N'Type ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Type a' + NCHAR(3), N'Type ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Type an ', N'Type ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Type an)', N'Type ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Type an;', N'Type ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Type an:', N'Type ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Type an' + NCHAR(3), N'Type ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'group a ', N'group ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'group a)', N'group ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'group a;', N'group ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'group a:', N'group ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'group a' + NCHAR(3), N'group ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'group an ', N'group ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'group an)', N'group ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'group an;', N'group ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'group an:', N'group ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'group an' + NCHAR(3), N'group ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'Group a ', N'Group ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Group a)', N'Group ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Group a;', N'Group ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Group a:', N'Group ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Group a' + NCHAR(3), N'Group ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Group an ', N'Group ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Group an)', N'Group ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Group an;', N'Group ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Group an:', N'Group ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Group an' + NCHAR(3), N'Group ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'grade a ', N'grade ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'grade a)', N'grade ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'grade a;', N'grade ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'grade a:', N'grade ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'grade a' + NCHAR(3), N'grade ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'grade an ', N'grade ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'grade an)', N'grade ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'grade an;', N'grade ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'grade an:', N'grade ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'grade an' + NCHAR(3), N'grade ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Grade a ', N'Grade ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Grade a)', N'Grade ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Grade a;', N'Grade ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Grade a:', N'Grade ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Grade a' + NCHAR(3), N'Grade ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Grade an ', N'Grade ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Grade an)', N'Grade ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Grade an;', N'Grade ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Grade an:', N'Grade ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Grade an' + NCHAR(3), N'Grade ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'class a ', N'class ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'class a)', N'class ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'class a;', N'class ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'class a:', N'class ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'class a' + NCHAR(3), N'class ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'class an ', N'class ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'class an)', N'class ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'class an;', N'class ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'class an:', N'class ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'class an' + NCHAR(3), N'class ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Class a ', N'Class ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Class a)', N'Class ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Class a;', N'Class ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Class a:', N'Class ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Class a' + NCHAR(3), N'Class ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Class an ', N'Class ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Class an)', N'Class ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Class an;', N'Class ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Class an:', N'Class ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Class an' + NCHAR(3), N'Class ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'subtype a ', N'subtype ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'subtype a)', N'subtype ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'subtype a;', N'subtype ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'subtype a:', N'subtype ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'subtype a' + NCHAR(3), N'subtype ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'subtype an ', N'subtype ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'subtype an)', N'subtype ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'subtype an;', N'subtype ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'subtype an:', N'subtype ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'subtype an' + NCHAR(3), N'subtype ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'Subtype a ', N'Subtype ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Subtype a)', N'Subtype ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Subtype a;', N'Subtype ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Subtype a:', N'Subtype ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Subtype a' + NCHAR(3), N'Subtype ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Subtype an ', N'Subtype ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Subtype an)', N'Subtype ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Subtype an;', N'Subtype ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Subtype an:', N'Subtype ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Subtype an' + NCHAR(3), N'Subtype ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'pattern a ', N'pattern ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'pattern a)', N'pattern ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'pattern a;', N'pattern ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'pattern a:', N'pattern ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'pattern a' + NCHAR(3), N'pattern ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'pattern an ', N'pattern ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'pattern an)', N'pattern ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'pattern an;', N'pattern ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'pattern an:', N'pattern ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'pattern an' + NCHAR(3), N'pattern ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Pattern a ', N'Pattern ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Pattern a)', N'Pattern ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Pattern a;', N'Pattern ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Pattern a:', N'Pattern ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Pattern a' + NCHAR(3), N'Pattern ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Pattern an ', N'Pattern ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Pattern an)', N'Pattern ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Pattern an;', N'Pattern ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Pattern an:', N'Pattern ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Pattern an' + NCHAR(3), N'Pattern ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'variant a ', N'variant ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'variant a)', N'variant ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'variant a;', N'variant ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'variant a:', N'variant ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'variant a' + NCHAR(3), N'variant ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'variant an ', N'variant ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'variant an)', N'variant ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'variant an;', N'variant ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'variant an:', N'variant ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'variant an' + NCHAR(3), N'variant ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Variant a ', N'Variant ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Variant a)', N'Variant ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Variant a;', N'Variant ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Variant a:', N'Variant ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Variant a' + NCHAR(3), N'Variant ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Variant an ', N'Variant ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Variant an)', N'Variant ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Variant an;', N'Variant ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Variant an:', N'Variant ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Variant an' + NCHAR(3), N'Variant ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'form a ', N'form ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'form a)', N'form ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'form a;', N'form ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'form a:', N'form ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'form a' + NCHAR(3), N'form ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'form an ', N'form ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'form an)', N'form ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'form an;', N'form ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'form an:', N'form ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'form an' + NCHAR(3), N'form ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'Form a ', N'Form ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Form a)', N'Form ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Form a;', N'Form ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Form a:', N'Form ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Form a' + NCHAR(3), N'Form ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Form an ', N'Form ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Form an)', N'Form ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Form an;', N'Form ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Form an:', N'Form ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Form an' + NCHAR(3), N'Form ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'hepatitis a ', N'hepatitis ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'hepatitis a)', N'hepatitis ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'hepatitis a;', N'hepatitis ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'hepatitis a:', N'hepatitis ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'hepatitis a' + NCHAR(3), N'hepatitis ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'hepatitis an ', N'hepatitis ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'hepatitis an)', N'hepatitis ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'hepatitis an;', N'hepatitis ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'hepatitis an:', N'hepatitis ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'hepatitis an' + NCHAR(3), N'hepatitis ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Hepatitis a ', N'Hepatitis ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Hepatitis a)', N'Hepatitis ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Hepatitis a;', N'Hepatitis ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Hepatitis a:', N'Hepatitis ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Hepatitis a' + NCHAR(3), N'Hepatitis ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Hepatitis an ', N'Hepatitis ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Hepatitis an)', N'Hepatitis ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Hepatitis an;', N'Hepatitis ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Hepatitis an:', N'Hepatitis ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Hepatitis an' + NCHAR(3), N'Hepatitis ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'vitamin a ', N'vitamin ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'vitamin a)', N'vitamin ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'vitamin a;', N'vitamin ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'vitamin a:', N'vitamin ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'vitamin a' + NCHAR(3), N'vitamin ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'vitamin an ', N'vitamin ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'vitamin an)', N'vitamin ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'vitamin an;', N'vitamin ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'vitamin an:', N'vitamin ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'vitamin an' + NCHAR(3), N'vitamin ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Vitamin a ', N'Vitamin ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Vitamin a)', N'Vitamin ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Vitamin a;', N'Vitamin ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Vitamin a:', N'Vitamin ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Vitamin a' + NCHAR(3), N'Vitamin ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Vitamin an ', N'Vitamin ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Vitamin an)', N'Vitamin ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Vitamin an;', N'Vitamin ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Vitamin an:', N'Vitamin ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Vitamin an' + NCHAR(3), N'Vitamin ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'factor a ', N'factor ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'factor a)', N'factor ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'factor a;', N'factor ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'factor a:', N'factor ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'factor a' + NCHAR(3), N'factor ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'factor an ', N'factor ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'factor an)', N'factor ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'factor an;', N'factor ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'factor an:', N'factor ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'factor an' + NCHAR(3), N'factor ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'Factor a ', N'Factor ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Factor a)', N'Factor ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Factor a;', N'Factor ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Factor a:', N'Factor ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Factor a' + NCHAR(3), N'Factor ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Factor an ', N'Factor ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Factor an)', N'Factor ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Factor an;', N'Factor ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Factor an:', N'Factor ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Factor an' + NCHAR(3), N'Factor ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'protein a ', N'protein ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'protein a)', N'protein ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'protein a;', N'protein ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'protein a:', N'protein ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'protein a' + NCHAR(3), N'protein ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'protein an ', N'protein ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'protein an)', N'protein ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'protein an;', N'protein ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'protein an:', N'protein ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'protein an' + NCHAR(3), N'protein ' + NCHAR(15) + N'an' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Protein a ', N'Protein ' + NCHAR(15) + N'a ')  -- U+000F control character
-
         , N'Protein a)', N'Protein ' + NCHAR(15) + N'a)')  -- U+000F control character
-
         , N'Protein a;', N'Protein ' + NCHAR(15) + N'a;')  -- U+000F control character
-
         , N'Protein a:', N'Protein ' + NCHAR(15) + N'a:')  -- U+000F control character
-
         , N'Protein a' + NCHAR(3), N'Protein ' + NCHAR(15) + N'a' + NCHAR(3))  -- U+0003 end sentinel, U+000F control character
-
         , N'Protein an ', N'Protein ' + NCHAR(15) + N'an ')  -- U+000F control character
-
         , N'Protein an)', N'Protein ' + NCHAR(15) + N'an)')  -- U+000F control character
-
         , N'Protein an;', N'Protein ' + NCHAR(15) + N'an;')  -- U+000F control character
-
         , N'Protein an:', N'Protein ' + NCHAR(15) + N'an:')  -- U+000F control character
-
         , N'Protein an' + NCHAR(3), N'Protein ' + NCHAR(15) + N'an' + NCHAR(3));  -- U+0003 end sentinel, U+000F control character
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' the ', N' ')
-
         , N' the)', N')')
-
         , N' the]', N']')
-
         , N' the}', N'}')
-
         , N' the:', N':')
-
         , N' the;', N';')
-
         , N'(the ', N'(')
-
         , N'(the]', N'(]')
-
         , N'(the}', N'(}')
-
         , N'(the:', N'(:')
-
         , N'(the;', N'(;')
-
         , N'[the ', N'[')
-
         , N'[the)', N'[)')
-
         , N'[the}', N'[}')
-
         , N'[the:', N'[:')
-
         , N'[the;', N'[;')
-
         , N'{the ', N'{')
-
         , N'{the)', N'{)')
-
         , N'{the]', N'{]')
-
         , N'{the:', N'{:')
-
         , N'{the;', N'{;')
-
         , N':the ', N':')
-
         , N':the)', N':)')
-
         , N':the]', N':]')
-
         , N':the}', N':}')
-
         , N':the:', N'::')
-
         , N':the;', N':;')
-
         , N';the ', N';')
-
         , N';the)', N';)')
-
         , N';the]', N';]');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N';the}', N';}')
-
         , N';the:', N';:')
-
         , N';the;', N';;')
-
         , N' a ', N' ')
-
         , N' a)', N')')
-
         , N' a]', N']')
-
         , N' a}', N'}')
-
         , N' a:', N':')
-
         , N' a;', N';')
-
         , N'(a ', N'(')
-
         , N'(a]', N'(]')
-
         , N'(a}', N'(}')
-
         , N'(a:', N'(:')
-
         , N'(a;', N'(;')
-
         , N'[a ', N'[')
-
         , N'[a)', N'[)')
-
         , N'[a}', N'[}')
-
         , N'[a:', N'[:')
-
         , N'[a;', N'[;')
-
         , N'{a ', N'{')
-
         , N'{a)', N'{)')
-
         , N'{a]', N'{]')
-
         , N'{a:', N'{:')
-
         , N'{a;', N'{;')
-
         , N':a ', N':')
-
         , N':a)', N':)')
-
         , N':a]', N':]')
-
         , N':a}', N':}')
-
         , N':a:', N'::')
-
         , N':a;', N':;');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N';a ', N';')
-
         , N';a)', N';)')
-
         , N';a]', N';]')
-
         , N';a}', N';}')
-
         , N';a:', N';:')
-
         , N';a;', N';;')
-
         , N' an ', N' ')
-
         , N' an)', N')')
-
         , N' an]', N']')
-
         , N' an}', N'}')
-
         , N' an:', N':')
-
         , N' an;', N';')
-
         , N'(an ', N'(')
-
         , N'(an]', N'(]')
-
         , N'(an}', N'(}')
-
         , N'(an:', N'(:')
-
         , N'(an;', N'(;')
-
         , N'[an ', N'[')
-
         , N'[an)', N'[)')
-
         , N'[an}', N'[}')
-
         , N'[an:', N'[:')
-
         , N'[an;', N'[;')
-
         , N'{an ', N'{')
-
         , N'{an)', N'{)')
-
         , N'{an]', N'{]')
-
         , N'{an:', N'{:')
-
         , N'{an;', N'{;')
-
         , N':an ', N':')
-
         , N':an)', N':)')
-
         , N':an]', N':]');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N':an}', N':}')
-
         , N':an:', N'::')
-
         , N':an;', N':;')
-
         , N';an ', N';')
-
         , N';an)', N';)')
-
         , N';an]', N';]')
-
         , N';an}', N';}')
-
         , N';an:', N';:')
-
         , N';an;', N';;')
-
         , N' the ', N' ')
-
         , N' a ', N' ')
-
         , N' an ', N' ')
-
         , N' ' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N': :', N':')
-
         , N' ;', N';')
-
         , N' :', N':')
-
         , N'::', N':');
-
-
 
     -- 9. Trailing Roman numerals. 'Trailing' = at the end of the string, or at the end of a closing parenthetical. Mid-string numerals are left alone. Order: 'type <roman>' first (it needs the word), then the word 'type' goes (9b), then grade and acronym numerals - so 'Grade III type' ends in its numeral when those rules look
 
-
-
     -- 9a. type <roman> -> <digit>: the word 'type' is dropped (maintainer decision)
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' type IV)', N' 4)')
-
         , N' type IV' + NCHAR(3), N' 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' type IV ', N' 4 ')
-
         , N' type IV;', N' 4;')
-
         , N' type IV:', N' 4:')
-
         , N'(type IV)', N'(4)')
-
         , N'(type IV' + NCHAR(3), N'(4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(type IV ', N'(4 ')
-
         , N'(type IV;', N'(4;')
-
         , N'(type IV:', N'(4:')
-
         , NCHAR(2) + N'type IV ', NCHAR(2) + N'type 4 ')  -- U+0002 start sentinel
-
         , N' type III)', N' 3)')
-
         , N' type III' + NCHAR(3), N' 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' type III ', N' 3 ')
-
         , N' type III;', N' 3;')
-
         , N' type III:', N' 3:')
-
         , N'(type III)', N'(3)')
-
         , N'(type III' + NCHAR(3), N'(3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(type III ', N'(3 ')
-
         , N'(type III;', N'(3;')
-
         , N'(type III:', N'(3:')
-
         , NCHAR(2) + N'type III ', NCHAR(2) + N'type 3 ')  -- U+0002 start sentinel
-
         , N' type II)', N' 2)')
-
         , N' type II' + NCHAR(3), N' 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' type II ', N' 2 ')
-
         , N' type II;', N' 2;')
-
         , N' type II:', N' 2:')
-
         , N'(type II)', N'(2)')
-
         , N'(type II' + NCHAR(3), N'(2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(type II ', N'(2 ');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'(type II;', N'(2;')
-
         , N'(type II:', N'(2:')
-
         , NCHAR(2) + N'type II ', NCHAR(2) + N'type 2 ')  -- U+0002 start sentinel
-
         , N' type I)', N' 1)')
-
         , N' type I' + NCHAR(3), N' 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' type I ', N' 1 ')
-
         , N' type I;', N' 1;')
-
         , N' type I:', N' 1:')
-
         , N'(type I)', N'(1)')
-
         , N'(type I' + NCHAR(3), N'(1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(type I ', N'(1 ')
-
         , N'(type I;', N'(1;')
-
         , N'(type I:', N'(1:')
-
         , NCHAR(2) + N'type I ', NCHAR(2) + N'type 1 ')  -- U+0002 start sentinel
-
         , N' Type IV)', N' 4)')
-
         , N' Type IV' + NCHAR(3), N' 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Type IV ', N' 4 ')
-
         , N' Type IV;', N' 4;')
-
         , N' Type IV:', N' 4:')
-
         , N'(Type IV)', N'(4)')
-
         , N'(Type IV' + NCHAR(3), N'(4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Type IV ', N'(4 ')
-
         , N'(Type IV;', N'(4;')
-
         , N'(Type IV:', N'(4:')
-
         , NCHAR(2) + N'Type IV ', NCHAR(2) + N'Type 4 ')  -- U+0002 start sentinel
-
         , N' Type III)', N' 3)')
-
         , N' Type III' + NCHAR(3), N' 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Type III ', N' 3 ')
-
         , N' Type III;', N' 3;')
-
         , N' Type III:', N' 3:');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'(Type III)', N'(3)')
-
         , N'(Type III' + NCHAR(3), N'(3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Type III ', N'(3 ')
-
         , N'(Type III;', N'(3;')
-
         , N'(Type III:', N'(3:')
-
         , NCHAR(2) + N'Type III ', NCHAR(2) + N'Type 3 ')  -- U+0002 start sentinel
-
         , N' Type II)', N' 2)')
-
         , N' Type II' + NCHAR(3), N' 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Type II ', N' 2 ')
-
         , N' Type II;', N' 2;')
-
         , N' Type II:', N' 2:')
-
         , N'(Type II)', N'(2)')
-
         , N'(Type II' + NCHAR(3), N'(2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Type II ', N'(2 ')
-
         , N'(Type II;', N'(2;')
-
         , N'(Type II:', N'(2:')
-
         , NCHAR(2) + N'Type II ', NCHAR(2) + N'Type 2 ')  -- U+0002 start sentinel
-
         , N' Type I)', N' 1)')
-
         , N' Type I' + NCHAR(3), N' 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Type I ', N' 1 ')
-
         , N' Type I;', N' 1;')
-
         , N' Type I:', N' 1:')
-
         , N'(Type I)', N'(1)')
-
         , N'(Type I' + NCHAR(3), N'(1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Type I ', N'(1 ')
-
         , N'(Type I;', N'(1;')
-
         , N'(Type I:', N'(1:')
-
         , NCHAR(2) + N'Type I ', NCHAR(2) + N'Type 1 ')  -- U+0002 start sentinel
-
         , N' TYPE IV)', N' 4)')
-
         , N' TYPE IV' + NCHAR(3), N' 4' + NCHAR(3));  -- U+0003 end sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' TYPE IV ', N' 4 ')
-
         , N' TYPE IV;', N' 4;')
-
         , N' TYPE IV:', N' 4:')
-
         , N'(TYPE IV)', N'(4)')
-
         , N'(TYPE IV' + NCHAR(3), N'(4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(TYPE IV ', N'(4 ')
-
         , N'(TYPE IV;', N'(4;')
-
         , N'(TYPE IV:', N'(4:')
-
         , NCHAR(2) + N'TYPE IV ', NCHAR(2) + N'TYPE 4 ')  -- U+0002 start sentinel
-
         , N' TYPE III)', N' 3)')
-
         , N' TYPE III' + NCHAR(3), N' 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' TYPE III ', N' 3 ')
-
         , N' TYPE III;', N' 3;')
-
         , N' TYPE III:', N' 3:')
-
         , N'(TYPE III)', N'(3)')
-
         , N'(TYPE III' + NCHAR(3), N'(3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(TYPE III ', N'(3 ')
-
         , N'(TYPE III;', N'(3;')
-
         , N'(TYPE III:', N'(3:')
-
         , NCHAR(2) + N'TYPE III ', NCHAR(2) + N'TYPE 3 ')  -- U+0002 start sentinel
-
         , N' TYPE II)', N' 2)')
-
         , N' TYPE II' + NCHAR(3), N' 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' TYPE II ', N' 2 ')
-
         , N' TYPE II;', N' 2;')
-
         , N' TYPE II:', N' 2:')
-
         , N'(TYPE II)', N'(2)')
-
         , N'(TYPE II' + NCHAR(3), N'(2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(TYPE II ', N'(2 ')
-
         , N'(TYPE II;', N'(2;')
-
         , N'(TYPE II:', N'(2:');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(2) + N'TYPE II ', NCHAR(2) + N'TYPE 2 ')  -- U+0002 start sentinel
-
         , N' TYPE I)', N' 1)')
-
         , N' TYPE I' + NCHAR(3), N' 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' TYPE I ', N' 1 ')
-
         , N' TYPE I;', N' 1;')
-
         , N' TYPE I:', N' 1:')
-
         , N'(TYPE I)', N'(1)')
-
         , N'(TYPE I' + NCHAR(3), N'(1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(TYPE I ', N'(1 ')
-
         , N'(TYPE I;', N'(1;')
-
         , N'(TYPE I:', N'(1:')
-
         , NCHAR(2) + N'TYPE I ', NCHAR(2) + N'TYPE 1 ');  -- U+0002 start sentinel
 
-
-
     -- 9b. The word 'type' removed - whole word, any of type/Type/TYPE, never as the first word ('Type A thymoma' keeps it); 'types', 'subtype', 'typical' untouched
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'type ' + NCHAR(15), N'type' + NCHAR(17) + NCHAR(15))  -- U+000F control character, U+0011 control character
-
         , N'Type ' + NCHAR(15), N'Type' + NCHAR(17) + NCHAR(15))  -- U+000F control character, U+0011 control character
-
         , N'TYPE ' + NCHAR(15), N'TYPE' + NCHAR(17) + NCHAR(15))  -- U+000F control character, U+0011 control character
-
         , N' type ', N' ')
-
         , N' type)', N')')
-
         , N' type]', N']')
-
         , N' type}', N'}')
-
         , N' type:', N':')
-
         , N' type;', N';')
-
         , N' type' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N'(type ', N'(')
-
         , N'(type)', N'')
-
         , N'(type]', N'(]')
-
         , N'(type}', N'(}')
-
         , N'(type:', N'(:')
-
         , N'(type;', N'(;')
-
         , N'(type' + NCHAR(3), N'(' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'[type ', N'[')
-
         , N'[type)', N'[)')
-
         , N'[type]', N'')
-
         , N'[type}', N'[}')
-
         , N'[type:', N'[:')
-
         , N'[type;', N'[;')
-
         , N'[type' + NCHAR(3), N'[' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'{type ', N'{')
-
         , N'{type)', N'{)')
-
         , N'{type]', N'{]')
-
         , N'{type}', N'')
-
         , N'{type:', N'{:')
-
         , N'{type;', N'{;');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'{type' + NCHAR(3), N'{' + NCHAR(3))  -- U+0003 end sentinel
-
         , N':type ', N':')
-
         , N':type)', N':)')
-
         , N':type]', N':]')
-
         , N':type}', N':}')
-
         , N':type:', N'::')
-
         , N':type;', N':;')
-
         , N':type' + NCHAR(3), N':' + NCHAR(3))  -- U+0003 end sentinel
-
         , N';type ', N';')
-
         , N';type)', N';)')
-
         , N';type]', N';]')
-
         , N';type}', N';}')
-
         , N';type:', N';:')
-
         , N';type;', N';;')
-
         , N';type' + NCHAR(3), N';' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Type ', N' ')
-
         , N' Type)', N')')
-
         , N' Type]', N']')
-
         , N' Type}', N'}')
-
         , N' Type:', N':')
-
         , N' Type;', N';')
-
         , N' Type' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Type ', N'(')
-
         , N'(Type)', N'')
-
         , N'(Type]', N'(]')
-
         , N'(Type}', N'(}')
-
         , N'(Type:', N'(:')
-
         , N'(Type;', N'(;')
-
         , N'(Type' + NCHAR(3), N'(' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'[Type ', N'[');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'[Type)', N'[)')
-
         , N'[Type]', N'')
-
         , N'[Type}', N'[}')
-
         , N'[Type:', N'[:')
-
         , N'[Type;', N'[;')
-
         , N'[Type' + NCHAR(3), N'[' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'{Type ', N'{')
-
         , N'{Type)', N'{)')
-
         , N'{Type]', N'{]')
-
         , N'{Type}', N'')
-
         , N'{Type:', N'{:')
-
         , N'{Type;', N'{;')
-
         , N'{Type' + NCHAR(3), N'{' + NCHAR(3))  -- U+0003 end sentinel
-
         , N':Type ', N':')
-
         , N':Type)', N':)')
-
         , N':Type]', N':]')
-
         , N':Type}', N':}')
-
         , N':Type:', N'::')
-
         , N':Type;', N':;')
-
         , N':Type' + NCHAR(3), N':' + NCHAR(3))  -- U+0003 end sentinel
-
         , N';Type ', N';')
-
         , N';Type)', N';)')
-
         , N';Type]', N';]')
-
         , N';Type}', N';}')
-
         , N';Type:', N';:')
-
         , N';Type;', N';;')
-
         , N';Type' + NCHAR(3), N';' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' TYPE ', N' ')
-
         , N' TYPE)', N')')
-
         , N' TYPE]', N']');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' TYPE}', N'}')
-
         , N' TYPE:', N':')
-
         , N' TYPE;', N';')
-
         , N' TYPE' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N'(TYPE ', N'(')
-
         , N'(TYPE)', N'')
-
         , N'(TYPE]', N'(]')
-
         , N'(TYPE}', N'(}')
-
         , N'(TYPE:', N'(:')
-
         , N'(TYPE;', N'(;')
-
         , N'(TYPE' + NCHAR(3), N'(' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'[TYPE ', N'[')
-
         , N'[TYPE)', N'[)')
-
         , N'[TYPE]', N'')
-
         , N'[TYPE}', N'[}')
-
         , N'[TYPE:', N'[:')
-
         , N'[TYPE;', N'[;')
-
         , N'[TYPE' + NCHAR(3), N'[' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'{TYPE ', N'{')
-
         , N'{TYPE)', N'{)')
-
         , N'{TYPE]', N'{]')
-
         , N'{TYPE}', N'')
-
         , N'{TYPE:', N'{:')
-
         , N'{TYPE;', N'{;')
-
         , N'{TYPE' + NCHAR(3), N'{' + NCHAR(3))  -- U+0003 end sentinel
-
         , N':TYPE ', N':')
-
         , N':TYPE)', N':)')
-
         , N':TYPE]', N':]')
-
         , N':TYPE}', N':}')
-
         , N':TYPE:', N'::');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N':TYPE;', N':;')
-
         , N':TYPE' + NCHAR(3), N':' + NCHAR(3))  -- U+0003 end sentinel
-
         , N';TYPE ', N';')
-
         , N';TYPE)', N';)')
-
         , N';TYPE]', N';]')
-
         , N';TYPE}', N';}')
-
         , N';TYPE:', N';:')
-
         , N';TYPE;', N';;')
-
         , N';TYPE' + NCHAR(3), N';' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' type ', N' ')
-
         , N' Type ', N' ')
-
         , N' TYPE ', N' ');
 
-
-
     -- 9c. Close up again after the 'type' removal
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' ' + NCHAR(3), NCHAR(3))  -- U+0003 end sentinel
-
         , N': :', N':')
-
         , N' ;', N';')
-
         , N' :', N':')
-
         , N'::', N':');
 
-
-
     -- 9d. grade <roman> -> grade <digit>: the word 'grade' is kept
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' grade IV)', N' grade 4)')
-
         , N' grade IV' + NCHAR(3), N' grade 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' grade IV ', N' grade 4 ')
-
         , N' grade IV;', N' grade 4;')
-
         , N' grade IV:', N' grade 4:')
-
         , N'(grade IV)', N'(grade 4)')
-
         , N'(grade IV' + NCHAR(3), N'(grade 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(grade IV ', N'(grade 4 ')
-
         , N'(grade IV;', N'(grade 4;')
-
         , N'(grade IV:', N'(grade 4:')
-
         , NCHAR(2) + N'grade IV)', NCHAR(2) + N'grade 4)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade IV' + NCHAR(3), NCHAR(2) + N'grade 4' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'grade IV ', NCHAR(2) + N'grade 4 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade IV;', NCHAR(2) + N'grade 4;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade IV:', NCHAR(2) + N'grade 4:')  -- U+0002 start sentinel
-
         , N' grade III)', N' grade 3)')
-
         , N' grade III' + NCHAR(3), N' grade 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' grade III ', N' grade 3 ')
-
         , N' grade III;', N' grade 3;')
-
         , N' grade III:', N' grade 3:')
-
         , N'(grade III)', N'(grade 3)')
-
         , N'(grade III' + NCHAR(3), N'(grade 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(grade III ', N'(grade 3 ')
-
         , N'(grade III;', N'(grade 3;')
-
         , N'(grade III:', N'(grade 3:')
-
         , NCHAR(2) + N'grade III)', NCHAR(2) + N'grade 3)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade III' + NCHAR(3), NCHAR(2) + N'grade 3' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'grade III ', NCHAR(2) + N'grade 3 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade III;', NCHAR(2) + N'grade 3;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade III:', NCHAR(2) + N'grade 3:');  -- U+0002 start sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' grade II)', N' grade 2)')
-
         , N' grade II' + NCHAR(3), N' grade 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' grade II ', N' grade 2 ')
-
         , N' grade II;', N' grade 2;')
-
         , N' grade II:', N' grade 2:')
-
         , N'(grade II)', N'(grade 2)')
-
         , N'(grade II' + NCHAR(3), N'(grade 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(grade II ', N'(grade 2 ')
-
         , N'(grade II;', N'(grade 2;')
-
         , N'(grade II:', N'(grade 2:')
-
         , NCHAR(2) + N'grade II)', NCHAR(2) + N'grade 2)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade II' + NCHAR(3), NCHAR(2) + N'grade 2' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'grade II ', NCHAR(2) + N'grade 2 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade II;', NCHAR(2) + N'grade 2;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade II:', NCHAR(2) + N'grade 2:')  -- U+0002 start sentinel
-
         , N' grade I)', N' grade 1)')
-
         , N' grade I' + NCHAR(3), N' grade 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' grade I ', N' grade 1 ')
-
         , N' grade I;', N' grade 1;')
-
         , N' grade I:', N' grade 1:')
-
         , N'(grade I)', N'(grade 1)')
-
         , N'(grade I' + NCHAR(3), N'(grade 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(grade I ', N'(grade 1 ')
-
         , N'(grade I;', N'(grade 1;')
-
         , N'(grade I:', N'(grade 1:')
-
         , NCHAR(2) + N'grade I)', NCHAR(2) + N'grade 1)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade I' + NCHAR(3), NCHAR(2) + N'grade 1' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'grade I ', NCHAR(2) + N'grade 1 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade I;', NCHAR(2) + N'grade 1;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'grade I:', NCHAR(2) + N'grade 1:');  -- U+0002 start sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' Grade IV)', N' Grade 4)')
-
         , N' Grade IV' + NCHAR(3), N' Grade 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Grade IV ', N' Grade 4 ')
-
         , N' Grade IV;', N' Grade 4;')
-
         , N' Grade IV:', N' Grade 4:')
-
         , N'(Grade IV)', N'(Grade 4)')
-
         , N'(Grade IV' + NCHAR(3), N'(Grade 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Grade IV ', N'(Grade 4 ')
-
         , N'(Grade IV;', N'(Grade 4;')
-
         , N'(Grade IV:', N'(Grade 4:')
-
         , NCHAR(2) + N'Grade IV)', NCHAR(2) + N'Grade 4)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade IV' + NCHAR(3), NCHAR(2) + N'Grade 4' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'Grade IV ', NCHAR(2) + N'Grade 4 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade IV;', NCHAR(2) + N'Grade 4;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade IV:', NCHAR(2) + N'Grade 4:')  -- U+0002 start sentinel
-
         , N' Grade III)', N' Grade 3)')
-
         , N' Grade III' + NCHAR(3), N' Grade 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Grade III ', N' Grade 3 ')
-
         , N' Grade III;', N' Grade 3;')
-
         , N' Grade III:', N' Grade 3:')
-
         , N'(Grade III)', N'(Grade 3)')
-
         , N'(Grade III' + NCHAR(3), N'(Grade 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Grade III ', N'(Grade 3 ')
-
         , N'(Grade III;', N'(Grade 3;')
-
         , N'(Grade III:', N'(Grade 3:')
-
         , NCHAR(2) + N'Grade III)', NCHAR(2) + N'Grade 3)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade III' + NCHAR(3), NCHAR(2) + N'Grade 3' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'Grade III ', NCHAR(2) + N'Grade 3 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade III;', NCHAR(2) + N'Grade 3;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade III:', NCHAR(2) + N'Grade 3:');  -- U+0002 start sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' Grade II)', N' Grade 2)')
-
         , N' Grade II' + NCHAR(3), N' Grade 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Grade II ', N' Grade 2 ')
-
         , N' Grade II;', N' Grade 2;')
-
         , N' Grade II:', N' Grade 2:')
-
         , N'(Grade II)', N'(Grade 2)')
-
         , N'(Grade II' + NCHAR(3), N'(Grade 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Grade II ', N'(Grade 2 ')
-
         , N'(Grade II;', N'(Grade 2;')
-
         , N'(Grade II:', N'(Grade 2:')
-
         , NCHAR(2) + N'Grade II)', NCHAR(2) + N'Grade 2)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade II' + NCHAR(3), NCHAR(2) + N'Grade 2' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'Grade II ', NCHAR(2) + N'Grade 2 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade II;', NCHAR(2) + N'Grade 2;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade II:', NCHAR(2) + N'Grade 2:')  -- U+0002 start sentinel
-
         , N' Grade I)', N' Grade 1)')
-
         , N' Grade I' + NCHAR(3), N' Grade 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' Grade I ', N' Grade 1 ')
-
         , N' Grade I;', N' Grade 1;')
-
         , N' Grade I:', N' Grade 1:')
-
         , N'(Grade I)', N'(Grade 1)')
-
         , N'(Grade I' + NCHAR(3), N'(Grade 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(Grade I ', N'(Grade 1 ')
-
         , N'(Grade I;', N'(Grade 1;')
-
         , N'(Grade I:', N'(Grade 1:')
-
         , NCHAR(2) + N'Grade I)', NCHAR(2) + N'Grade 1)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade I' + NCHAR(3), NCHAR(2) + N'Grade 1' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'Grade I ', NCHAR(2) + N'Grade 1 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade I;', NCHAR(2) + N'Grade 1;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Grade I:', NCHAR(2) + N'Grade 1:');  -- U+0002 start sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' GRADE IV)', N' GRADE 4)')
-
         , N' GRADE IV' + NCHAR(3), N' GRADE 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' GRADE IV ', N' GRADE 4 ')
-
         , N' GRADE IV;', N' GRADE 4;')
-
         , N' GRADE IV:', N' GRADE 4:')
-
         , N'(GRADE IV)', N'(GRADE 4)')
-
         , N'(GRADE IV' + NCHAR(3), N'(GRADE 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(GRADE IV ', N'(GRADE 4 ')
-
         , N'(GRADE IV;', N'(GRADE 4;')
-
         , N'(GRADE IV:', N'(GRADE 4:')
-
         , NCHAR(2) + N'GRADE IV)', NCHAR(2) + N'GRADE 4)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE IV' + NCHAR(3), NCHAR(2) + N'GRADE 4' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'GRADE IV ', NCHAR(2) + N'GRADE 4 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE IV;', NCHAR(2) + N'GRADE 4;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE IV:', NCHAR(2) + N'GRADE 4:')  -- U+0002 start sentinel
-
         , N' GRADE III)', N' GRADE 3)')
-
         , N' GRADE III' + NCHAR(3), N' GRADE 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' GRADE III ', N' GRADE 3 ')
-
         , N' GRADE III;', N' GRADE 3;')
-
         , N' GRADE III:', N' GRADE 3:')
-
         , N'(GRADE III)', N'(GRADE 3)')
-
         , N'(GRADE III' + NCHAR(3), N'(GRADE 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(GRADE III ', N'(GRADE 3 ')
-
         , N'(GRADE III;', N'(GRADE 3;')
-
         , N'(GRADE III:', N'(GRADE 3:')
-
         , NCHAR(2) + N'GRADE III)', NCHAR(2) + N'GRADE 3)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE III' + NCHAR(3), NCHAR(2) + N'GRADE 3' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'GRADE III ', NCHAR(2) + N'GRADE 3 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE III;', NCHAR(2) + N'GRADE 3;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE III:', NCHAR(2) + N'GRADE 3:');  -- U+0002 start sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' GRADE II)', N' GRADE 2)')
-
         , N' GRADE II' + NCHAR(3), N' GRADE 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' GRADE II ', N' GRADE 2 ')
-
         , N' GRADE II;', N' GRADE 2;')
-
         , N' GRADE II:', N' GRADE 2:')
-
         , N'(GRADE II)', N'(GRADE 2)')
-
         , N'(GRADE II' + NCHAR(3), N'(GRADE 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(GRADE II ', N'(GRADE 2 ')
-
         , N'(GRADE II;', N'(GRADE 2;')
-
         , N'(GRADE II:', N'(GRADE 2:')
-
         , NCHAR(2) + N'GRADE II)', NCHAR(2) + N'GRADE 2)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE II' + NCHAR(3), NCHAR(2) + N'GRADE 2' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'GRADE II ', NCHAR(2) + N'GRADE 2 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE II;', NCHAR(2) + N'GRADE 2;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE II:', NCHAR(2) + N'GRADE 2:')  -- U+0002 start sentinel
-
         , N' GRADE I)', N' GRADE 1)')
-
         , N' GRADE I' + NCHAR(3), N' GRADE 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' GRADE I ', N' GRADE 1 ')
-
         , N' GRADE I;', N' GRADE 1;')
-
         , N' GRADE I:', N' GRADE 1:')
-
         , N'(GRADE I)', N'(GRADE 1)')
-
         , N'(GRADE I' + NCHAR(3), N'(GRADE 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N'(GRADE I ', N'(GRADE 1 ')
-
         , N'(GRADE I;', N'(GRADE 1;')
-
         , N'(GRADE I:', N'(GRADE 1:')
-
         , NCHAR(2) + N'GRADE I)', NCHAR(2) + N'GRADE 1)')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE I' + NCHAR(3), NCHAR(2) + N'GRADE 1' + NCHAR(3))  -- U+0002 start sentinel, U+0003 end sentinel
-
         , NCHAR(2) + N'GRADE I ', NCHAR(2) + N'GRADE 1 ')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE I;', NCHAR(2) + N'GRADE 1;')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'GRADE I:', NCHAR(2) + N'GRADE 1:');  -- U+0002 start sentinel
 
-
-
     -- 9d-ii. a numeral right after a converted one: 'grade II/III' -> 'grade 2 III' -> 'grade 2 3'
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' 1 IV)', N' 1 4)')
-
         , N' 1 IV' + NCHAR(3), N' 1 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 1 IV ', N' 1 4 ')
-
         , N' 1 IV;', N' 1 4;')
-
         , N' 1 IV:', N' 1 4:')
-
         , N' 1 III)', N' 1 3)')
-
         , N' 1 III' + NCHAR(3), N' 1 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 1 III ', N' 1 3 ')
-
         , N' 1 III;', N' 1 3;')
-
         , N' 1 III:', N' 1 3:')
-
         , N' 1 II)', N' 1 2)')
-
         , N' 1 II' + NCHAR(3), N' 1 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 1 II ', N' 1 2 ')
-
         , N' 1 II;', N' 1 2;')
-
         , N' 1 II:', N' 1 2:')
-
         , N' 1 I)', N' 1 1)')
-
         , N' 1 I' + NCHAR(3), N' 1 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 1 I ', N' 1 1 ')
-
         , N' 1 I;', N' 1 1;')
-
         , N' 1 I:', N' 1 1:')
-
         , N' 2 IV)', N' 2 4)')
-
         , N' 2 IV' + NCHAR(3), N' 2 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 2 IV ', N' 2 4 ')
-
         , N' 2 IV;', N' 2 4;')
-
         , N' 2 IV:', N' 2 4:')
-
         , N' 2 III)', N' 2 3)')
-
         , N' 2 III' + NCHAR(3), N' 2 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 2 III ', N' 2 3 ')
-
         , N' 2 III;', N' 2 3;')
-
         , N' 2 III:', N' 2 3:');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' 2 II)', N' 2 2)')
-
         , N' 2 II' + NCHAR(3), N' 2 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 2 II ', N' 2 2 ')
-
         , N' 2 II;', N' 2 2;')
-
         , N' 2 II:', N' 2 2:')
-
         , N' 2 I)', N' 2 1)')
-
         , N' 2 I' + NCHAR(3), N' 2 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 2 I ', N' 2 1 ')
-
         , N' 2 I;', N' 2 1;')
-
         , N' 2 I:', N' 2 1:')
-
         , N' 3 IV)', N' 3 4)')
-
         , N' 3 IV' + NCHAR(3), N' 3 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 3 IV ', N' 3 4 ')
-
         , N' 3 IV;', N' 3 4;')
-
         , N' 3 IV:', N' 3 4:')
-
         , N' 3 III)', N' 3 3)')
-
         , N' 3 III' + NCHAR(3), N' 3 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 3 III ', N' 3 3 ')
-
         , N' 3 III;', N' 3 3;')
-
         , N' 3 III:', N' 3 3:')
-
         , N' 3 II)', N' 3 2)')
-
         , N' 3 II' + NCHAR(3), N' 3 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 3 II ', N' 3 2 ')
-
         , N' 3 II;', N' 3 2;')
-
         , N' 3 II:', N' 3 2:')
-
         , N' 3 I)', N' 3 1)')
-
         , N' 3 I' + NCHAR(3), N' 3 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 3 I ', N' 3 1 ')
-
         , N' 3 I;', N' 3 1;')
-
         , N' 3 I:', N' 3 1:');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' 4 IV)', N' 4 4)')
-
         , N' 4 IV' + NCHAR(3), N' 4 4' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 4 IV ', N' 4 4 ')
-
         , N' 4 IV;', N' 4 4;')
-
         , N' 4 IV:', N' 4 4:')
-
         , N' 4 III)', N' 4 3)')
-
         , N' 4 III' + NCHAR(3), N' 4 3' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 4 III ', N' 4 3 ')
-
         , N' 4 III;', N' 4 3;')
-
         , N' 4 III:', N' 4 3:')
-
         , N' 4 II)', N' 4 2)')
-
         , N' 4 II' + NCHAR(3), N' 4 2' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 4 II ', N' 4 2 ')
-
         , N' 4 II;', N' 4 2;')
-
         , N' 4 II:', N' 4 2:')
-
         , N' 4 I)', N' 4 1)')
-
         , N' 4 I' + NCHAR(3), N' 4 1' + NCHAR(3))  -- U+0003 end sentinel
-
         , N' 4 I ', N' 4 1 ')
-
         , N' 4 I;', N' 4 1;')
-
         , N' 4 I:', N' 4 1:');
-
-
 
     -- 9e. ALL-CAPS acronym + roman -> acronym + digit (CIN III = CIN 3, RAEB II = RAEB 2). Rule: the two characters before the trailing numeral are both A-Z. Done with plain replacements and markers instead of a LIKE test, so SQL Server can inline it
 
-
-
     -- 9e-i. mark the space before a whole-word I/II/III (followed by a space, ')' or the end)
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' III ', NCHAR(4) + N'III ')  -- U+0004 control character
-
         , N' III)', NCHAR(4) + N'III)')  -- U+0004 control character
-
         , N' III' + NCHAR(3), NCHAR(4) + N'III' + NCHAR(3))  -- U+0003 end sentinel, U+0004 control character
-
         , N' III;', NCHAR(4) + N'III;')  -- U+0004 control character
-
         , N' III:', NCHAR(4) + N'III:')  -- U+0004 control character
-
         , N' II ', NCHAR(4) + N'II ')  -- U+0004 control character
-
         , N' II)', NCHAR(4) + N'II)')  -- U+0004 control character
-
         , N' II' + NCHAR(3), NCHAR(4) + N'II' + NCHAR(3))  -- U+0003 end sentinel, U+0004 control character
-
         , N' II;', NCHAR(4) + N'II;')  -- U+0004 control character
-
         , N' II:', NCHAR(4) + N'II:')  -- U+0004 control character
-
         , N' I ', NCHAR(4) + N'I ')  -- U+0004 control character
-
         , N' I)', NCHAR(4) + N'I)')  -- U+0004 control character
-
         , N' I' + NCHAR(3), NCHAR(4) + N'I' + NCHAR(3))  -- U+0003 end sentinel, U+0004 control character
-
         , N' I;', NCHAR(4) + N'I;')  -- U+0004 control character
-
         , N' I:', NCHAR(4) + N'I:');  -- U+0004 control character
 
-
-
     -- 9e-ii. a capital right before the mark gets a marker in front of it ...
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'A' + NCHAR(4), NCHAR(5) + N'A' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'B' + NCHAR(4), NCHAR(5) + N'B' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'C' + NCHAR(4), NCHAR(5) + N'C' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'D' + NCHAR(4), NCHAR(5) + N'D' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'E' + NCHAR(4), NCHAR(5) + N'E' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'F' + NCHAR(4), NCHAR(5) + N'F' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'G' + NCHAR(4), NCHAR(5) + N'G' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'H' + NCHAR(4), NCHAR(5) + N'H' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'I' + NCHAR(4), NCHAR(5) + N'I' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'J' + NCHAR(4), NCHAR(5) + N'J' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'K' + NCHAR(4), NCHAR(5) + N'K' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'L' + NCHAR(4), NCHAR(5) + N'L' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'M' + NCHAR(4), NCHAR(5) + N'M' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'N' + NCHAR(4), NCHAR(5) + N'N' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'O' + NCHAR(4), NCHAR(5) + N'O' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'P' + NCHAR(4), NCHAR(5) + N'P' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'Q' + NCHAR(4), NCHAR(5) + N'Q' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'R' + NCHAR(4), NCHAR(5) + N'R' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'S' + NCHAR(4), NCHAR(5) + N'S' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'T' + NCHAR(4), NCHAR(5) + N'T' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'U' + NCHAR(4), NCHAR(5) + N'U' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'V' + NCHAR(4), NCHAR(5) + N'V' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'W' + NCHAR(4), NCHAR(5) + N'W' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'X' + NCHAR(4), NCHAR(5) + N'X' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'Y' + NCHAR(4), NCHAR(5) + N'Y' + NCHAR(4))  -- U+0004 control character, U+0005 control character
-
         , N'Z' + NCHAR(4), NCHAR(5) + N'Z' + NCHAR(4));  -- U+0004 control character, U+0005 control character
 
-
-
     -- 9e-iii. ... which is promoted if the character before THAT is also a capital
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'A' + NCHAR(5), N'A' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'B' + NCHAR(5), N'B' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'C' + NCHAR(5), N'C' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'D' + NCHAR(5), N'D' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'E' + NCHAR(5), N'E' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'F' + NCHAR(5), N'F' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'G' + NCHAR(5), N'G' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'H' + NCHAR(5), N'H' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'I' + NCHAR(5), N'I' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'J' + NCHAR(5), N'J' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'K' + NCHAR(5), N'K' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'L' + NCHAR(5), N'L' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'M' + NCHAR(5), N'M' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'N' + NCHAR(5), N'N' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'O' + NCHAR(5), N'O' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'P' + NCHAR(5), N'P' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'Q' + NCHAR(5), N'Q' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'R' + NCHAR(5), N'R' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'S' + NCHAR(5), N'S' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'T' + NCHAR(5), N'T' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'U' + NCHAR(5), N'U' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'V' + NCHAR(5), N'V' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'W' + NCHAR(5), N'W' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'X' + NCHAR(5), N'X' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'Y' + NCHAR(5), N'Y' + NCHAR(6))  -- U+0005 control character, U+0006 control character
-
         , N'Z' + NCHAR(5), N'Z' + NCHAR(6));  -- U+0005 control character, U+0006 control character
 
-
-
     -- 9e-iv. two capitals confirmed: the space mark becomes the convert mark
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(6) + N'A' + NCHAR(4), N'A' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'B' + NCHAR(4), N'B' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'C' + NCHAR(4), N'C' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'D' + NCHAR(4), N'D' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'E' + NCHAR(4), N'E' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'F' + NCHAR(4), N'F' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'G' + NCHAR(4), N'G' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'H' + NCHAR(4), N'H' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'I' + NCHAR(4), N'I' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'J' + NCHAR(4), N'J' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'K' + NCHAR(4), N'K' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'L' + NCHAR(4), N'L' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'M' + NCHAR(4), N'M' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'N' + NCHAR(4), N'N' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'O' + NCHAR(4), N'O' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'P' + NCHAR(4), N'P' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'Q' + NCHAR(4), N'Q' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'R' + NCHAR(4), N'R' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'S' + NCHAR(4), N'S' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'T' + NCHAR(4), N'T' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'U' + NCHAR(4), N'U' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'V' + NCHAR(4), N'V' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'W' + NCHAR(4), N'W' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'X' + NCHAR(4), N'X' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'Y' + NCHAR(4), N'Y' + NCHAR(8))  -- U+0006 control character, U+0004 control character, U+0008 control character
-
         , NCHAR(6) + N'Z' + NCHAR(4), N'Z' + NCHAR(8));  -- U+0006 control character, U+0004 control character, U+0008 control character
 
-
-
     -- 9e-v. convert the confirmed numeral, then remove all markers (restoring the space)
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(8) + N'III ', N' 3 ')  -- U+0008 control character
-
         , NCHAR(8) + N'III)', N' 3)')  -- U+0008 control character
-
         , NCHAR(8) + N'III' + NCHAR(3), N' 3' + NCHAR(3))  -- U+0008 control character, U+0003 end sentinel
-
         , NCHAR(8) + N'III;', N' 3;')  -- U+0008 control character
-
         , NCHAR(8) + N'III:', N' 3:')  -- U+0008 control character
-
         , NCHAR(8) + N'II ', N' 2 ')  -- U+0008 control character
-
         , NCHAR(8) + N'II)', N' 2)')  -- U+0008 control character
-
         , NCHAR(8) + N'II' + NCHAR(3), N' 2' + NCHAR(3))  -- U+0008 control character, U+0003 end sentinel
-
         , NCHAR(8) + N'II;', N' 2;')  -- U+0008 control character
-
         , NCHAR(8) + N'II:', N' 2:')  -- U+0008 control character
-
         , NCHAR(8) + N'I ', N' 1 ')  -- U+0008 control character
-
         , NCHAR(8) + N'I)', N' 1)')  -- U+0008 control character
-
         , NCHAR(8) + N'I' + NCHAR(3), N' 1' + NCHAR(3))  -- U+0008 control character, U+0003 end sentinel
-
         , NCHAR(8) + N'I;', N' 1;')  -- U+0008 control character
-
         , NCHAR(8) + N'I:', N' 1:')  -- U+0008 control character
-
         , NCHAR(5), N'')  -- U+0005 control character
-
         , NCHAR(6), N'')  -- U+0006 control character
-
         , NCHAR(4), N' ')  -- U+0004 control character
-
         , NCHAR(8), N' ');  -- U+0008 control character
 
-
-
     -- 9f. (v3) The space before a karyotype ('pre t(9;22)', 'Non del(5q)') is protected, so steps 10/10b never glue a word onto it (a second pass would split it again)
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' t(', NCHAR(17) + N't(')  -- U+0011 control character
-
         , N' inv(', NCHAR(17) + N'inv(')  -- U+0011 control character
-
         , N' del(', NCHAR(17) + N'del(')  -- U+0011 control character
-
         , N' der(', NCHAR(17) + N'der(')  -- U+0011 control character
-
         , N' dup(', NCHAR(17) + N'dup(')  -- U+0011 control character
-
         , N' ins(', NCHAR(17) + N'ins(')  -- U+0011 control character
-
         , N' i(', NCHAR(17) + N'i(')  -- U+0011 control character
-
         , N' add(', NCHAR(17) + N'add(')  -- U+0011 control character
-
         , N' idic(', NCHAR(17) + N'idic(');  -- U+0011 control character
 
-
-
     -- 10. The whole word non/Non/NON joins the next word: 'Non small' = 'Nonsmall'
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' non ', N' non')
-
         , N'(non ', N'(non')
-
         , N'[non ', N'[non')
-
         , N'{non ', N'{non')
-
         , N':non ', N':non')
-
         , N';non ', N';non')
-
         , NCHAR(2) + N'non ', NCHAR(2) + N'non')  -- U+0002 start sentinel
-
         , N' Non ', N' Non')
-
         , N'(Non ', N'(Non')
-
         , N'[Non ', N'[Non')
-
         , N'{Non ', N'{Non')
-
         , N':Non ', N':Non')
-
         , N';Non ', N';Non')
-
         , NCHAR(2) + N'Non ', NCHAR(2) + N'Non')  -- U+0002 start sentinel
-
         , N' NON ', N' NON')
-
         , N'(NON ', N'(NON')
-
         , N'[NON ', N'[NON')
-
         , N'{NON ', N'{NON')
-
         , N':NON ', N':NON')
-
         , N';NON ', N';NON')
-
         , NCHAR(2) + N'NON ', NCHAR(2) + N'NON')  -- U+0002 start sentinel
-
         , N' non ', N' non')
-
         , N'(non ', N'(non')
-
         , N'[non ', N'[non')
-
         , N'{non ', N'{non')
-
         , N':non ', N':non')
-
         , N';non ', N';non')
-
         , NCHAR(2) + N'non ', NCHAR(2) + N'non')  -- U+0002 start sentinel
-
         , N' Non ', N' Non')
-
         , N'(Non ', N'(Non');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'[Non ', N'[Non')
-
         , N'{Non ', N'{Non')
-
         , N':Non ', N':Non')
-
         , N';Non ', N';Non')
-
         , NCHAR(2) + N'Non ', NCHAR(2) + N'Non')  -- U+0002 start sentinel
-
         , N' NON ', N' NON')
-
         , N'(NON ', N'(NON')
-
         , N'[NON ', N'[NON')
-
         , N'{NON ', N'{NON')
-
         , N':NON ', N':NON')
-
         , N';NON ', N';NON')
-
         , NCHAR(2) + N'NON ', NCHAR(2) + N'NON');  -- U+0002 start sentinel
 
-
-
     -- 10b. Bound prefixes join the next word like 'non': 'micro invasive' = 'microinvasive'; (v3 R5) a repeated prefix first: 'pre pre B' -> 'prepreB'
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N' micro micro ', N' micromicro')
-
         , N' micro ', N' micro')
-
         , N'(micro micro ', N'(micromicro')
-
         , N'(micro ', N'(micro')
-
         , NCHAR(2) + N'micro micro ', NCHAR(2) + N'micromicro')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'micro ', NCHAR(2) + N'micro')  -- U+0002 start sentinel
-
         , N'micromicro ', N'micromicro')
-
         , N' Micro micro ', N' Micromicro')
-
         , N' Micro ', N' Micro')
-
         , N'(Micro micro ', N'(Micromicro')
-
         , N'(Micro ', N'(Micro')
-
         , NCHAR(2) + N'Micro micro ', NCHAR(2) + N'Micromicro')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Micro ', NCHAR(2) + N'Micro')  -- U+0002 start sentinel
-
         , N'Micromicro ', N'Micromicro')
-
         , N' pre pre ', N' prepre')
-
         , N' pre ', N' pre')
-
         , N'(pre pre ', N'(prepre')
-
         , N'(pre ', N'(pre')
-
         , NCHAR(2) + N'pre pre ', NCHAR(2) + N'prepre')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'pre ', NCHAR(2) + N'pre')  -- U+0002 start sentinel
-
         , N'prepre ', N'prepre')
-
         , N' Pre pre ', N' Prepre')
-
         , N' Pre ', N' Pre')
-
         , N'(Pre pre ', N'(Prepre')
-
         , N'(Pre ', N'(Pre')
-
         , NCHAR(2) + N'Pre pre ', NCHAR(2) + N'Prepre')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Pre ', NCHAR(2) + N'Pre')  -- U+0002 start sentinel
-
         , N'Prepre ', N'Prepre')
-
         , N' post post ', N' postpost')
-
         , N' post ', N' post');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'(post post ', N'(postpost')
-
         , N'(post ', N'(post')
-
         , NCHAR(2) + N'post post ', NCHAR(2) + N'postpost')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'post ', NCHAR(2) + N'post')  -- U+0002 start sentinel
-
         , N'postpost ', N'postpost')
-
         , N' Post post ', N' Postpost')
-
         , N' Post ', N' Post')
-
         , N'(Post post ', N'(Postpost')
-
         , N'(Post ', N'(Post')
-
         , NCHAR(2) + N'Post post ', NCHAR(2) + N'Postpost')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Post ', NCHAR(2) + N'Post')  -- U+0002 start sentinel
-
         , N'Postpost ', N'Postpost')
-
         , N' extra extra ', N' extraextra')
-
         , N' extra ', N' extra')
-
         , N'(extra extra ', N'(extraextra')
-
         , N'(extra ', N'(extra')
-
         , NCHAR(2) + N'extra extra ', NCHAR(2) + N'extraextra')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'extra ', NCHAR(2) + N'extra')  -- U+0002 start sentinel
-
         , N'extraextra ', N'extraextra')
-
         , N' Extra extra ', N' Extraextra')
-
         , N' Extra ', N' Extra')
-
         , N'(Extra extra ', N'(Extraextra')
-
         , N'(Extra ', N'(Extra')
-
         , NCHAR(2) + N'Extra extra ', NCHAR(2) + N'Extraextra')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Extra ', NCHAR(2) + N'Extra')  -- U+0002 start sentinel
-
         , N'Extraextra ', N'Extraextra')
-
         , N' poly poly ', N' polypoly')
-
         , N' poly ', N' poly')
-
         , N'(poly poly ', N'(polypoly')
-
         , N'(poly ', N'(poly');
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(2) + N'poly poly ', NCHAR(2) + N'polypoly')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'poly ', NCHAR(2) + N'poly')  -- U+0002 start sentinel
-
         , N'polypoly ', N'polypoly')
-
         , N' Poly poly ', N' Polypoly')
-
         , N' Poly ', N' Poly')
-
         , N'(Poly poly ', N'(Polypoly')
-
         , N'(Poly ', N'(Poly')
-
         , NCHAR(2) + N'Poly poly ', NCHAR(2) + N'Polypoly')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Poly ', NCHAR(2) + N'Poly')  -- U+0002 start sentinel
-
         , N'Polypoly ', N'Polypoly')
-
         , N' atrio atrio ', N' atrioatrio')
-
         , N' atrio ', N' atrio')
-
         , N'(atrio atrio ', N'(atrioatrio')
-
         , N'(atrio ', N'(atrio')
-
         , NCHAR(2) + N'atrio atrio ', NCHAR(2) + N'atrioatrio')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'atrio ', NCHAR(2) + N'atrio')  -- U+0002 start sentinel
-
         , N'atrioatrio ', N'atrioatrio')
-
         , N' Atrio atrio ', N' Atrioatrio')
-
         , N' Atrio ', N' Atrio')
-
         , N'(Atrio atrio ', N'(Atrioatrio')
-
         , N'(Atrio ', N'(Atrio')
-
         , NCHAR(2) + N'Atrio atrio ', NCHAR(2) + N'Atrioatrio')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Atrio ', NCHAR(2) + N'Atrio')  -- U+0002 start sentinel
-
         , N'Atrioatrio ', N'Atrioatrio')
-
         , N' tubulo tubulo ', N' tubulotubulo')
-
         , N' tubulo ', N' tubulo')
-
         , N'(tubulo tubulo ', N'(tubulotubulo')
-
         , N'(tubulo ', N'(tubulo')
-
         , NCHAR(2) + N'tubulo tubulo ', NCHAR(2) + N'tubulotubulo')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'tubulo ', NCHAR(2) + N'tubulo');  -- U+0002 start sentinel
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'tubulotubulo ', N'tubulotubulo')
-
         , N' Tubulo tubulo ', N' Tubulotubulo')
-
         , N' Tubulo ', N' Tubulo')
-
         , N'(Tubulo tubulo ', N'(Tubulotubulo')
-
         , N'(Tubulo ', N'(Tubulo')
-
         , NCHAR(2) + N'Tubulo tubulo ', NCHAR(2) + N'Tubulotubulo')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Tubulo ', NCHAR(2) + N'Tubulo')  -- U+0002 start sentinel
-
         , N'Tubulotubulo ', N'Tubulotubulo')
-
         , N' bronchiolo bronchiolo ', N' bronchiolobronchiolo')
-
         , N' bronchiolo ', N' bronchiolo')
-
         , N'(bronchiolo bronchiolo ', N'(bronchiolobronchiolo')
-
         , N'(bronchiolo ', N'(bronchiolo')
-
         , NCHAR(2) + N'bronchiolo bronchiolo ', NCHAR(2) + N'bronchiolobronchiolo')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'bronchiolo ', NCHAR(2) + N'bronchiolo')  -- U+0002 start sentinel
-
         , N'bronchiolobronchiolo ', N'bronchiolobronchiolo')
-
         , N' Bronchiolo bronchiolo ', N' Bronchiolobronchiolo')
-
         , N' Bronchiolo ', N' Bronchiolo')
-
         , N'(Bronchiolo bronchiolo ', N'(Bronchiolobronchiolo')
-
         , N'(Bronchiolo ', N'(Bronchiolo')
-
         , NCHAR(2) + N'Bronchiolo bronchiolo ', NCHAR(2) + N'Bronchiolobronchiolo')  -- U+0002 start sentinel
-
         , NCHAR(2) + N'Bronchiolo ', NCHAR(2) + N'Bronchiolo')  -- U+0002 start sentinel
-
         , N'Bronchiolobronchiolo ', N'Bronchiolobronchiolo');
 
-
-
     -- 12. Remove the sentinels; collapse spaces BEFORE tidying parentheses (a removal can leave two spaces after '('); tidy the ends again, since removals can expose a leading '+'/'?' or trailing '.'
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , NCHAR(2), N'')  -- U+0002 start sentinel
-
         , NCHAR(3), N'')  -- U+0003 end sentinel
-
         , NCHAR(14), NCHAR(8722))  -- U+000E control character, U+2212 MINUS SIGN
-
         , NCHAR(15), N'')  -- U+000F control character
-
         , NCHAR(17), N' ');  -- U+0011 control character
-
     -- collapse runs of spaces without a loop: BEL marks each space, 'BEL +
-
     -- space' pairs are dropped, then leftover marks. BEL cannot come from the
-
     -- input: step 2 removed every control character.
-
     SET @s = REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2, N' ', N' ' + NCHAR(7)), NCHAR(7) + N' ', N''), NCHAR(7), N'');  -- U+0007 BELL used as a marker
-
     SET @s = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2
-
         , N'( ', N'(')
-
         , N' )', N')')
-
         , N'()', N'')
-
         , N'{(', N'{ (')
-
         , N'[(', N'[ (')
-
         , N': :', N':')
-
         , N' ;', N';')
-
         , N' :', N':')
-
         , N'::', N':');
-
     -- collapse runs of spaces without a loop: BEL marks each space, 'BEL +
-
     -- space' pairs are dropped, then leftover marks. BEL cannot come from the
-
     -- input: step 2 removed every control character.
-
     SET @s = REPLACE(REPLACE(REPLACE(@s COLLATE Latin1_General_100_BIN2, N' ', N' ' + NCHAR(7)), NCHAR(7) + N' ', N''), NCHAR(7), N'');  -- U+0007 BELL used as a marker
-
     SET @s = LTRIM(@s, N'+? ');
-
     SET @s = RTRIM(@s, N'. ;:');
 
-
-
     RETURN @s;
-
 END
-
-
 
 
 GO
@@ -4687,6 +3138,193 @@ LEFT JOIN section_text s ON s.page_id=k.page_id AND s.TermUS=k.TermUS
 LEFT JOIN site_text sites ON sites.page_id=k.page_id
 GO
 
+CREATE OR ALTER VIEW dbo.v_legacy_entity_terms AS
+SELECT 'entity_codes' AS term_table,entity_code_id AS term_id,page_id,term,TermUS,TermNormUS,
+       code AS source_code,is_subtype,
+       COALESCE(term_role, CASE WHEN is_subtype=1 THEN 'subtype' ELSE 'preferred' END) AS term_role,
+       'coding' AS terminology_kind
+FROM dbo.entity_codes
+UNION ALL
+SELECT 'entity_related_terms',related_term_id,page_id,term,TermUS,TermNormUS,
+       NULL,0,
+       COALESCE(term_role, CASE kind WHEN 'acceptable' THEN 'related_acceptable' WHEN 'not_recommended' THEN 'related_not_recommended' ELSE 'related_unlabeled' END),
+       kind FROM dbo.entity_related_terms
+GO
+CREATE OR ALTER VIEW dbo.v_legacy_entity_term_provenance AS
+SELECT t.*,p.provenance_id,p.source_kind,p.source_table,p.source_row_id,
+       p.original_text,p.recovered_term,p.suggested_qualifier,p.terminology_status,
+       p.review_status,p.is_added_term,p.proposal_batch,p.note
+FROM dbo.v_legacy_entity_terms t LEFT JOIN dbo.entity_term_provenance p
+ON t.page_id=p.page_id AND
+ ((t.term_table='entity_codes' AND t.term_id=p.entity_code_id) OR
+  (t.term_table='entity_related_terms' AND t.term_id=p.related_term_id))
+GO
+CREATE OR ALTER VIEW dbo.v_legacy_entity_term_code_matches AS
+SELECT t.*,p.source_kind,p.suggested_qualifier,p.is_added_term,p.proposal_batch,
+       m.match_id,m.edition,m.code AS suggested_code,m.official_termUS AS official_term,
+       m.official_termUS AS candidateTermUS,m.official_termNormUS AS candidateTermNormUS,m.official_term AS official_term_source,m.match_type,
+       m.candidate_order,m.conditions,m.review_status,m.reference_file,
+       m.reference_sheet,m.reference_row,m.reference_sha256,m.code_term_evidence
+FROM dbo.v_legacy_entity_terms t
+LEFT JOIN dbo.entity_term_provenance p ON t.page_id=p.page_id AND
+ ((t.term_table='entity_codes' AND t.term_id=p.entity_code_id) OR
+  (t.term_table='entity_related_terms' AND t.term_id=p.related_term_id))
+ AND p.provenance_id=(SELECT MIN(p2.provenance_id) FROM dbo.entity_term_provenance p2
+ WHERE p2.page_id=p.page_id AND
+ ((t.term_table='entity_codes' AND p2.entity_code_id=t.term_id) OR
+  (t.term_table='entity_related_terms' AND p2.related_term_id=t.term_id)))
+LEFT JOIN dbo.entity_term_code_matches m ON m.provenance_id=p.provenance_id
+GO
+CREATE OR ALTER VIEW dbo.v_entity_terms AS
+SELECT * FROM dbo.v_legacy_entity_terms
+UNION ALL
+SELECT 'page_term_mentions',m.mention_id,m.page_id,m.term_original,m.TermUS,m.TermNormUS,
+ m.icdo_code,CASE WHEN m.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
+ m.term_role,m.term_source FROM dbo.page_term_mentions m WHERE m.is_current=1
+ AND NOT EXISTS(SELECT 1 FROM dbo.v_legacy_entity_terms t WHERE t.page_id=m.page_id AND t.TermUS=m.TermUS)
+
+GO
+
+CREATE OR ALTER VIEW dbo.v_entity_term_provenance AS
+SELECT m.page_id,m.mention_id AS term_id,m.term_original AS term,m.TermUS,m.TermNormUS,
+ m.icdo_code AS source_code,m.observation_key,m.source_locator,m.term_origin AS source_kind,
+ m.term_source,m.source_heading,m.snippet AS original_text,m.context_class,
+ m.extraction_tier,m.review_status,m.is_current
+FROM dbo.page_term_mentions m
+
+GO
+
+CREATE OR ALTER VIEW dbo.v_entity_term_code_matches AS
+SELECT 'page_term_mentions' AS term_table,m.mention_id AS term_id,m.page_id,
+ m.term_original AS term,m.TermUS,m.TermNormUS,m.icdo_code AS source_code,
+ CASE WHEN m.term_role LIKE '%subtype%' THEN 1 ELSE 0 END AS is_subtype,
+ m.term_role,m.term_source AS terminology_kind,m.term_origin AS source_kind,
+ m.term_role AS suggested_qualifier,CASE WHEN m.term_origin='legacy_import' THEN 1 ELSE 0 END AS is_added_term,
+ CAST(NULL AS VARCHAR(60)) AS proposal_batch,c.candidate_id AS match_id,
+ e.edition,c.code AS suggested_code,c.candidateTermUS AS official_term,
+ c.candidateTermUS,c.candidateTermNormUS,c.official_term AS official_term_source,
+ c.match_type,c.candidate_order,c.conditions,c.review_status,
+ CAST(NULL AS VARCHAR(600)) AS reference_file,CAST(NULL AS VARCHAR(100)) AS reference_sheet,
+ CAST(NULL AS INT) AS reference_row,e.reference_sha256,c.reference_evidence AS code_term_evidence,
+ e.outcome,e.is_current,m.observation_key,c.candidate_key
+FROM dbo.page_term_mentions m
+JOIN dbo.term_lookup_evaluations e ON e.mention_id=m.mention_id
+LEFT JOIN dbo.term_code_candidates c ON c.evaluation_id=e.evaluation_id
+
+GO
+
+CREATE OR ALTER VIEW dbo.v_term_candidate_evidence AS
+SELECT m.page_id,m.observation_key,m.source_locator,m.term_origin,m.term_source,
+ m.context_class,m.extraction_tier,m.snippet,m.TermUS COLLATE Latin1_General_100_BIN2 AS TermUS,m.TermNormUS,
+ e.edition,e.outcome,e.reference_sha256,e.matcher_version,e.is_current,e.evidence_hash,e.detail,
+ c.candidate_key,c.code,c.candidateTermUS,c.match_type,c.evidence_tier,
+ c.conditions,c.reference_evidence,c.review_status
+FROM dbo.page_term_mentions m
+JOIN dbo.term_lookup_evaluations e ON e.mention_id=m.mention_id
+LEFT JOIN dbo.term_code_candidates c ON c.evaluation_id=e.evaluation_id
+
+GO
+
+CREATE OR ALTER VIEW dbo.v_page_code_terms AS
+WITH raw AS (
+ SELECT c.page_id,c.TermUS COLLATE Latin1_General_100_BIN2 AS TermUS,c.TermNormUS,
+ CASE WHEN LEN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END AS code_edition,
+ c.code,NULL AS candidateTermUS,0 AS is_proposed_code,0 AS is_proposed_term,
+ 'source_assignment' AS code_kind,'source' AS source_kind,
+ c.term_role,CAST(c.is_subtype AS INT) AS is_subtype,
+ 'coding_section' AS term_source,'entity_codes' AS source_tables,
+ 'ICD-O coding' AS page_sections,'coding' AS terminology_kind,
+ COALESCE((SELECT MAX(e.outcome) FROM dbo.term_lookup_evaluations e
+ JOIN dbo.page_term_mentions m ON m.mention_id=e.mention_id
+ WHERE m.page_id=c.page_id AND m.TermUS COLLATE Latin1_General_100_BIN2=c.TermUS COLLATE Latin1_General_100_BIN2 AND e.is_current=1
+ AND e.edition=CASE WHEN LEN(c.code)=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END),
+ 'not_evaluated') AS lookup_outcome,NULL AS match_type,NULL AS conditions,NULL AS review_status
+ FROM dbo.entity_codes c WHERE c.code IS NOT NULL AND TRIM(c.code)<>''
+ AND NOT EXISTS(SELECT 1 FROM dbo.v_term_candidate_evidence v WHERE v.page_id=c.page_id
+ AND v.TermUS COLLATE Latin1_General_100_BIN2=c.TermUS COLLATE Latin1_General_100_BIN2 AND v.code=c.code AND v.is_current=1 AND v.review_status<>'rejected')
+ UNION ALL
+ SELECT p.page_id,p.TermUS,p.TermNormUS,
+ CASE WHEN LEN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END,
+ COALESCE(p.icdo_code_raw,p.icdo_code),NULL,0,0,'contextual_code','source',
+ p.term_role,CASE WHEN p.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
+ p.term_source,'page_icdo_codes',p.section_heading,'coding',
+ COALESCE((SELECT MAX(e.outcome) FROM dbo.term_lookup_evaluations e
+ JOIN dbo.page_term_mentions m ON m.mention_id=e.mention_id
+ WHERE m.page_id=p.page_id AND m.TermUS COLLATE Latin1_General_100_BIN2=p.TermUS COLLATE Latin1_General_100_BIN2 AND e.is_current=1
+ AND e.edition=CASE WHEN LEN(COALESCE(p.icdo_code_raw,p.icdo_code))=6 THEN 'ICD-O-3.2' ELSE 'ICD-O-4' END),
+ 'not_evaluated'),NULL,NULL,NULL
+ FROM dbo.page_icdo_codes p WHERE COALESCE(p.icdo_code_raw,p.icdo_code) IS NOT NULL
+ AND p.TermUS IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM dbo.v_term_candidate_evidence v WHERE v.page_id=p.page_id
+ AND v.TermUS COLLATE Latin1_General_100_BIN2=p.TermUS COLLATE Latin1_General_100_BIN2 AND v.code=COALESCE(p.icdo_code_raw,p.icdo_code)
+ AND v.is_current=1 AND v.review_status<>'rejected')
+ UNION ALL
+ SELECT m.page_id,m.TermUS,m.TermNormUS,e.edition,c.code,c.candidateTermUS COLLATE Latin1_General_100_BIN2,
+ CASE WHEN c.code IS NOT NULL AND NOT EXISTS(
+ SELECT 1 FROM dbo.entity_codes s WHERE s.page_id=m.page_id AND s.TermUS COLLATE Latin1_General_100_BIN2=m.TermUS COLLATE Latin1_General_100_BIN2 AND s.code=c.code)
+ AND NOT EXISTS(SELECT 1 FROM dbo.page_icdo_codes s WHERE s.page_id=m.page_id
+ AND s.TermUS COLLATE Latin1_General_100_BIN2=m.TermUS COLLATE Latin1_General_100_BIN2 AND COALESCE(s.icdo_code_raw,s.icdo_code)=c.code) THEN 1 ELSE 0 END,
+ CASE WHEN c.candidateTermUS IS NOT NULL AND c.candidateTermUS COLLATE Latin1_General_100_BIN2<>m.TermUS COLLATE Latin1_General_100_BIN2 THEN 1 ELSE 0 END,
+ CASE WHEN c.code IS NULL THEN 'uncoded_term' ELSE 'candidate' END,m.term_origin,
+ m.term_role,CASE WHEN m.term_role LIKE '%subtype%' THEN 1 ELSE 0 END,
+ m.term_source,'page_term_mentions',m.source_heading,
+ CASE WHEN m.term_source='related_terminology' THEN
+ CASE m.term_role WHEN 'synonym' THEN 'acceptable' WHEN 'not_recommended' THEN 'not_recommended' ELSE 'other' END
+ WHEN m.term_source IN ('coding_section','coding_page') THEN 'coding'
+ WHEN m.term_source='page_title' THEN 'title' ELSE 'contextual' END,
+ e.outcome,c.match_type,c.conditions,c.review_status
+ FROM dbo.page_term_mentions m JOIN dbo.term_lookup_evaluations e
+ ON e.mention_id=m.mention_id AND e.is_current=1
+ LEFT JOIN dbo.term_code_candidates c ON c.evaluation_id=e.evaluation_id AND c.review_status<>'rejected'
+ WHERE m.is_current=1 AND m.review_status<>'rejected'
+),
+grain AS (
+ SELECT page_id,TermUS,MAX(TermNormUS) AS TermNormUS,code_edition,code,candidateTermUS,
+ MAX(is_proposed_code) AS is_proposed_code,MAX(is_proposed_term) AS is_proposed_term,
+ MAX(term_role) AS term_role,MAX(is_subtype) AS is_subtype,
+ MAX(term_source) AS term_source,MAX(source_tables) AS source_tables,
+ MAX(page_sections) AS page_sections,MAX(terminology_kind) AS terminology_kind,
+ MAX(lookup_outcome) AS lookup_outcome,MAX(match_type) AS match_type,
+ MAX(conditions) AS conditions,MAX(review_status) AS review_status,
+ MAX(CASE WHEN code_kind IN ('source_assignment','contextual_code')
+ OR (code IS NOT NULL AND is_proposed_code=0) THEN 1 ELSE 0 END) AS has_source,
+ MAX(CASE WHEN code_kind='candidate' THEN 1 ELSE 0 END) AS has_candidate,
+ MAX(source_kind) AS source_kind,
+ MAX(CASE WHEN source_kind='source' THEN 1 ELSE 0 END) AS has_source_observation,
+ MAX(CASE WHEN source_kind='legacy_import' THEN 1 ELSE 0 END) AS has_legacy_observation
+ FROM raw GROUP BY page_id,TermUS,code_edition,code,candidateTermUS
+),
+site_rows AS (
+ SELECT page_id,c_code,MAX(confidence_score) AS confidence_score
+ FROM dbo.page_site_hints WHERE confidence_score>=0.9 GROUP BY page_id,c_code
+),
+site_text AS (
+ SELECT page_id,STRING_AGG(CAST(c_code AS NVARCHAR(MAX)),N'; ') WITHIN GROUP (ORDER BY c_code) AS candidate_topography_codes,
+ MIN(confidence_score) AS site_confidence_min,MAX(confidence_score) AS site_confidence_max
+ FROM site_rows GROUP BY page_id
+)
+SELECT b.alias,b.title AS book_name,b.book_id,b.edition,g.page_id,
+ COALESCE(ch.title,ep.chapter) AS chapter,ch.ord AS ch_order,p.title AS page_title,p.url AS page_url,
+ g.page_sections,g.TermUS,g.TermNormUS,g.candidateTermUS,g.code_edition,
+ CASE WHEN g.code_edition='ICD-O-3.2' THEN g.code END AS ICDO32,
+ CASE WHEN g.code_edition='ICD-O-4' THEN g.code END AS ICDO4,
+ g.code AS morphology_code,g.is_subtype,g.term_role,g.term_source,
+ CASE WHEN g.has_source=1 AND g.has_candidate=1 THEN 'source_assignment; candidate'
+ WHEN g.has_source=1 THEN 'source_assignment' WHEN g.has_candidate=1 THEN 'candidate'
+ ELSE 'uncoded_term' END AS code_kind,
+ CASE WHEN g.has_source_observation=1 AND g.has_legacy_observation=1 THEN 'source; legacy_import'
+ ELSE g.source_kind END AS source_kind,
+ NULL AS suggested_qualifier,g.match_type,g.terminology_kind,g.conditions,g.review_status,
+ g.source_tables,g.is_proposed_code,g.is_proposed_term,g.lookup_outcome,
+ sites.candidate_topography_codes,sites.site_confidence_min,sites.site_confidence_max
+FROM grain g JOIN dbo.pages p ON p.page_id=g.page_id
+JOIN dbo.books b ON b.book_id=p.book_id
+LEFT JOIN dbo.chapters ch ON ch.chapter_id=p.chapter_id
+LEFT JOIN dbo.entity_pages ep ON ep.page_id=g.page_id
+LEFT JOIN site_text sites ON sites.page_id=g.page_id
+
+CREATE OR ALTER TRIGGER dbo.tr_term_review_append_only ON dbo.term_review_decisions INSTEAD OF UPDATE, DELETE AS BEGIN THROW 51000, 'Review decisions are append-only', 1; END
+GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.entity_term_provenance') AND name='ck_local_entity_term_provenance_target')
 ALTER TABLE dbo.[entity_term_provenance] WITH CHECK ADD CONSTRAINT [ck_local_entity_term_provenance_target] CHECK ((entity_code_id IS NOT NULL AND related_term_id IS NULL) OR (entity_code_id IS NULL AND related_term_id IS NOT NULL));
 GO
@@ -4722,4 +3360,49 @@ ALTER TABLE dbo.[entity_term_code_matches] WITH CHECK ADD CONSTRAINT [ck_local_e
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.entity_term_code_matches') AND name='ck_local_entity_term_code_matches_review')
 ALTER TABLE dbo.[entity_term_code_matches] WITH CHECK ADD CONSTRAINT [ck_local_entity_term_code_matches_review] CHECK (review_status IN ('proposed','approved','rejected','needs_review'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_reference_rows') AND name='ck_local_term_reference_rows_edition')
+ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_edition] CHECK (edition IN ('ICD-O-3.2','ICD-O-4'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_reference_rows') AND name='ck_local_term_reference_rows_reference_row')
+ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_reference_row] CHECK (reference_row>0);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_reference_rows') AND name='ck_local_term_reference_rows_reference_sha256')
+ALTER TABLE dbo.[term_reference_rows] WITH CHECK ADD CONSTRAINT [ck_local_term_reference_rows_reference_sha256] CHECK (LEN(reference_sha256)=64);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_edition')
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_edition] CHECK (edition IN ('ICD-O-3.2','ICD-O-4'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_outcome')
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_outcome] CHECK (outcome IN ('matched','ambiguous','no_match','not_applicable','needs_review','not_evaluated'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_current')
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_current] CHECK (is_current IN (0,1));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_lookup_evaluations') AND name='ck_local_term_lookup_evaluations_hashes')
+ALTER TABLE dbo.[term_lookup_evaluations] WITH CHECK ADD CONSTRAINT [ck_local_term_lookup_evaluations_hashes] CHECK (LEN(reference_sha256)=64 AND LEN(evidence_hash)=64);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_match_type')
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_match_type] CHECK (match_type IN ('exact','synonym','normalized','broader','narrower','conditional','legacy_curated'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_evidence_tier')
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_evidence_tier] CHECK (evidence_tier IN ('structured','supported_span','interpretation','curated_review'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_candidate_order')
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_candidate_order] CHECK (candidate_order>0);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_code_candidates') AND name='ck_local_term_code_candidates_review_status')
+ALTER TABLE dbo.[term_code_candidates] WITH CHECK ADD CONSTRAINT [ck_local_term_code_candidates_review_status] CHECK (review_status IN ('proposed','approved','rejected','needs_review'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_review_decisions') AND name='ck_local_term_review_decisions_scope')
+ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_scope] CHECK (scope IN ('observation','page_context','candidate','term_edition_code','global_extraction'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_review_decisions') AND name='ck_local_term_review_decisions_outcome')
+ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_outcome] CHECK (outcome IN ('approved','rejected','needs_review','proposed'));
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_review_decisions') AND name='ck_local_term_review_decisions_evidence_hash')
+ALTER TABLE dbo.[term_review_decisions] WITH CHECK ADD CONSTRAINT [ck_local_term_review_decisions_evidence_hash] CHECK (LEN(evidence_hash)=64);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID('dbo.term_pipeline_migrations') AND name='ck_local_term_pipeline_migrations_imported_rows')
+ALTER TABLE dbo.[term_pipeline_migrations] WITH CHECK ADD CONSTRAINT [ck_local_term_pipeline_migrations_imported_rows] CHECK (imported_rows>=0);
 GO

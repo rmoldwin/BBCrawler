@@ -1,10 +1,14 @@
 import unittest
+import sqlite3
 from pathlib import Path
 import sys
+from unittest.mock import patch
+from contextlib import closing
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "BBNotebook"))
 from bb_entity_extract import (
     audit_saved_body_coverage,
+    build_spreadsheet_rows,
     extract_saved_sections,
     parse_entity_page,
 )
@@ -25,6 +29,72 @@ def _page(*sections):
 
 
 class SavedHTMLParserTests(unittest.TestCase):
+    def test_spreadsheet_retains_uncoded_title_and_shared_edition_outcomes(self):
+        entity = parse_entity_page(_page(
+            _section("Definition", "A mixed tumor."),
+            _section("ICD-O coding", "Not applicable")), "Gynandroblastoma")
+        record = {"entity": entity, "page_id": 4941, "chapter": "Chapter",
+                  "category": "", "subcategory": "", "url": ""}
+        with closing(sqlite3.connect(":memory:")) as con:
+            con.execute(
+                "CREATE TABLE v_page_code_terms(book_id,page_id,TermUS,code_edition,"
+                "morphology_code,candidateTermUS,is_proposed_code,is_proposed_term,"
+                "lookup_outcome,review_status)")
+            con.executemany("INSERT INTO v_page_code_terms VALUES(?,?,?,?,?,?,?,?,?,?)", [
+                (7, 4941, "Gynandroblastoma", "ICD-O-3.2", "8632/1",
+                 "Gynandroblastoma", 1, 0, "matched", "proposed"),
+                (7, 4941, "Gynandroblastoma", "ICD-O-4", "86320/1",
+                 "Gynandroblastoma", 1, 0, "matched", "proposed"),
+            ])
+            outcomes = []
+            with patch("bb_entity_extract.extract_book_entities", return_value=[record]):
+                rows = build_spreadsheet_rows(con, 7, lookup_status_out=outcomes)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["ICD-O-4 Term"], "Gynandroblastoma")
+            self.assertEqual(rows[0]["ICD-O-4"], "")
+            self.assertEqual(rows[0]["Lookup_ICDO32+"], "8632/1")
+            self.assertEqual(rows[0]["Lookup_ICDO4.0"], "86320/1")
+            self.assertEqual(rows[0]["IsProposedCode"], 1)
+            self.assertEqual(outcomes, [("Gynandroblastoma", "matched", "matched")])
+            con.execute("INSERT INTO v_page_code_terms VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (7, 4941, "Gynandroblastoma", "ICD-O-4", "99999/1",
+                         "Alternate official label", 1, 1, "matched", "needs_review"))
+            with patch("bb_entity_extract.extract_book_entities", return_value=[record]):
+                ambiguous = build_spreadsheet_rows(con, 7, lookup_status_out=outcomes)
+            self.assertEqual(ambiguous[0]["Lookup_ICDO4.0"], "")
+            self.assertTrue(outcomes[-1][2].startswith("ambiguous:"))
+            self.assertIn("needs_review", ambiguous[0]["MappingReviewStatus"])
+
+    def test_title_eligible_despite_beta_or_empty_coding(self):
+        for coding in ("Awaiting ICD-O", "Not applicable", ""):
+            entity = parse_entity_page(_page(
+                _section("Definition", "A mixed sex cord stromal tumor."),
+                _section("ICD-O coding", coding)), "Gynandroblastoma")
+            self.assertTrue(entity.has_entity_content)
+            self.assertEqual(entity.title, "Gynandroblastoma")
+            self.assertFalse(entity.coded_terms)
+
+    def test_nested_definition_and_related_only_content_are_eligible(self):
+        entity = parse_entity_page(_page(
+            _section("Definition", ""),
+            _section("Additional entity definition", "Metastatic tumors are secondary lesions.")),
+            "Metastases to the peritoneum")
+        self.assertTrue(entity.has_entity_content)
+        self.assertIn("secondary lesions", entity.definition)
+        related = parse_entity_page(_page(
+            _section("Related terminology", "Acceptable: Tumor alternate name")),
+            "Related-only entity")
+        self.assertTrue(related.has_entity_content)
+        blank = parse_entity_page(_page(_section("Definition", "")), "Blank")
+        self.assertFalse(blank.has_entity_content)
+
+    def test_standalone_placeholder_not_parenthetical_qualifier(self):
+        entity = parse_entity_page(_page(_section(
+            "Related terminology",
+            "Acceptable: Not Applicable.; Not applicable (N/A); "
+            "Tumor (classification not applicable)")))
+        self.assertEqual(entity.acceptable, ["Tumor (classification not applicable)"])
+
     def test_extracts_ordered_anchored_sections_without_navigation_chrome(self):
         raw_html = _page(
             '<div class="navbar"><div class="description" id="nav">'

@@ -217,12 +217,13 @@ class TermRecoveryTests(unittest.TestCase):
                 self.assertIn(match["match_type"], ("exact", "synonym", "broader", "conditional"))
                 self.assertTrue(match["conditions"])
 
-    def test_refresh_preflights_manifest_and_excludes_proposals_from_code_evidence(self):
+    def test_refresh_preflights_official_sources_without_manifest_replay(self):
         source = Path(local.__file__).read_text(encoding="utf-8")
-        self.assertLess(source.index("recovery_manifest = term_recovery.load_manifest()"),
+        self.assertLess(source.index("official_refs, official_hashes = term_pipeline.read_references()"),
                         source.index("for table in reversed(DERIVED)"))
         self.assertIn("p.is_added_term=1", source)
-        self.assertIn("recovery_result = term_recovery.populate", source)
+        self.assertNotIn("recovery_result = term_recovery.populate", source)
+        self.assertIn("recovery_result = term_pipeline.run", source)
 
 
 if __name__ == "__main__":

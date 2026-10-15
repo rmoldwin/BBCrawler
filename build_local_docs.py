@@ -10,6 +10,7 @@ import sys
 import bluebooks_local as local
 import term_hygiene
 import term_recovery
+import term_pipeline
 
 
 def export_deployed_clean2():
@@ -46,13 +47,19 @@ SOURCES = {
     "entity_term_code_matches": "Edition-aware proposed exact/synonym/broader/conditional mappings, linked to the first provenance record per target term. Original ICD-O-3.2 and supplied September ICD-O-4 reference terms, codes, workbook rows/hashes and candidate conditions are explicit. These are not source-supplied page codes.",
     "entity_identifiers": "MIM/OMIM identifiers from labeled numbering rows, qualified hereditary/predisposition coding rows and inline subtype citations. source_kind distinguishes coding_section from section_text; source_heading preserves exact section provenance. Clause fragments are not used as display terms, and full source text remains in raw_text. Never treated as ICD-O morphology evidence.",
     "cpc_curation": "Manual working-group decisions. Never cleared by enrichment; mirror conflicts fail for explicit reconciliation.",
-    "icdo4_morphology": "Local CPC_ICDO4/1-s2.0-S1877782126000044-mmc1.xlsx, a) Morphology sheet.",
+    "icdo4_morphology": "Official local CPC_ICDO4/Updates_2026_09/ICD-O-4.xlsx, Morphology sheet. Older supplement is not mixed into current lookup.",
     "cpc_morph_codes": "Newest dated local CPC_ICDO4/CPC_MorphCodeList_*.csv. Original text, normalized keys, retired flag and source filename retained.",
     "icdo_site_specific_terms": "Local ICDO32_Site_Specific_Terms.xlsx: Site-Specific Terms, All Screened Terms, Uncertain Items, header row 5.",
     "icdo_site_specific_term_sites": "One child row per workbook term/C-code; source labels preserved.",
     "page_icdo_codes": "Section text plus saved-HTML entity_codes. Raw code retained; four-digit compatibility code normalized as in existing helpers. section_heading records coding/subtype context.",
-    "page_term_mentions": "Lexicon-matched page titles, headings/body, image captions, link labels and structured related terms; coding rows can contribute unmonitored terms. Original/normalized text and source context retained.",
-    "page_site_hints": "Positive term-to-workbook site mappings (0.90) and broad book-title family prefixes (0.45). C##* prefixes are hints, not verified exact sites.",
+    "page_term_mentions": "Observation-first eligible titles (including unmatched titles), structured coding/related labels, known official prose spans and explicit one-time legacy imports. Stable observation_key, source_locator, term_origin, context_class, extraction_tier, evidence_hash and is_current preserve discovery/history independently of codes. icdo_code is printed evidence only; standalone placeholders are centrally rejected.",
+    "term_saved_sections": "Saved DOM-section cache; source SHA256 plus explicit parser version invalidate cached sections. Shared by refresh and spreadsheet extraction, never authoritative over raw_html.",
+    "term_reference_rows": "Official ICD-O-3.2 and September ICD-O-4 file/hash/sheet/actual row identity; original and canonical labels. Historical revisions retained, not silently mixed.",
+    "term_lookup_evaluations": "Non-null observation-linked, independently edition/revision/evidence/version keyed outcomes; current and historical evaluations retained.",
+    "term_code_candidates": "Non-null evaluation-linked official mappings, BB wording separate from official candidateTermUS, ordinal evidence tier, conditions and actual supporting rows in reference_evidence JSON. Never source assignments.",
+    "term_review_decisions": "Append-only scoped reviewer decisions. Candidate/page-context/observation/term-edition-code/global-extraction scopes are explicit; changed evidence reopens review. No deletion or overwriting of history.",
+    "term_pipeline_migrations": "One-time migration markers, including the adapter from persisted curated recovery to generic observations/candidates; prevents replay on each steady refresh.",
+    "page_site_hints": "Unique positive unconditioned official ICD-O-3.2 relationships matched to site workbook labels (0.90); ambiguous, rejected, historical/incidental/differential/negated observations cannot supply term_site_match. No arbitrary first proposal.",
     "page_entity_evidence": "Deterministic mention rollup. Positive/excluded counts, source kinds, code-on-page and hints. Score = positive - 0.5*excluded + 0.5*has_code; not a probability.",
     "page_search_documents": "One deterministic page document: recovered section bodies plus existing stored text and nonduplicated entity definitions/terms/identifier text. Shared source for both whole-page search indexes. Coverage validation checks extracted bodies and independent saved-source prose, not merely index counts. Missing local prose cannot be recovered without new source data.",
     "enum_values": "Centralized lookup catalog for all system enumerations across source, status, role, match, and evidence domains with full definitions and legacy migration mappings.",
@@ -70,6 +77,8 @@ def main():
             "recover saved section bodies, prune only unlinked empty entity sections, import references, normalize pages, "
             "parse saved entities and OMIM identifiers, extract codes, mentions, "
             "site hints/evidence, then build search documents and FTS. Data replacement is transactional. "
+            "Standalone placeholder cleanup is shared by migrations and refreshes. Persisted legacy curation "
+            "is adapted once and recorded in `term_pipeline_migrations`, not replayed on every refresh. "
             "Runner Step 7b optionally mirrors the managed snapshot with preserved keys/timestamps "
             "and verifies normalized row hashes before committing.", "",
             "Missing reference files fail before clearing data. No online access, login, discovery, "
@@ -128,6 +137,7 @@ def main():
                 name = index[1]
                 if name.startswith("sqlite_"):
                     name = f"ux_local_{table}_" + "_".join(cols)
+                observation_filter = table == "page_term_mentions" and cols == ["observation_key"]
                 keys = " AND ".join(
                     "EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.columns c "
                     "ON c.object_id=ic.object_id AND c.column_id=ic.column_id "
@@ -137,12 +147,15 @@ def main():
                 ddl += [
                     "IF NOT EXISTS(SELECT 1 FROM sys.indexes i "
                     f"WHERE i.object_id=OBJECT_ID('dbo.{table}') AND i.type IN (1,2) "
-                    "AND i.is_disabled=0 AND i.has_filter=0 " +
+                    "AND i.is_disabled=0 " +
+                    ("AND i.has_filter=1 AND i.filter_definition LIKE '%observation_key%IS NOT NULL%' "
+                     if observation_filter else "AND i.has_filter=0 ") +
                     ("AND i.is_unique=1 " if index[2] else "") +
                     f"AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id=i.object_id "
                     f"AND ic.index_id=i.index_id AND ic.key_ordinal>0)={len(cols)} AND {keys})",
                     f"CREATE {'UNIQUE ' if index[2] else ''}INDEX [{name}] ON dbo.[{table}] (" +
-                    ",".join(f"[{c}]" for c in cols) + ");", "GO",
+                    ",".join(f"[{c}]" for c in cols) + ")" +
+                    (" WHERE [observation_key] IS NOT NULL" if observation_filter else "") + ";", "GO",
                 ]
             for fk in con.execute(f'PRAGMA foreign_key_list("{table}")'):
                 if fk[2] not in local.TABLES:
@@ -176,8 +189,13 @@ def main():
             ddl += [term_hygiene.server_trigger_sql(table), "GO"]
         for table in term_hygiene.DISPLAY_COLUMNS:
             ddl += [term_hygiene.server_display_trigger_sql(table), "GO"]
-        ddl += [term_recovery.view_sql(sqlserver=True)]
-        for table, checks in term_recovery.server_checks().items():
+        ddl += [term_recovery.view_sql(sqlserver=True), term_pipeline.view_sql(sqlserver=True)]
+        ddl += [
+            "CREATE OR ALTER TRIGGER dbo.tr_term_review_append_only ON dbo.term_review_decisions "
+            "INSTEAD OF UPDATE, DELETE AS BEGIN "
+            "THROW 51000, 'Review decisions are append-only', 1; END", "GO",
+        ]
+        for table, checks in (term_recovery.server_checks() | term_pipeline.server_checks()).items():
             for label, check in checks.items():
                 name = f"ck_local_{table}_{label}"
                 ddl += [
@@ -232,7 +250,7 @@ def main():
             "apply the same initial-case policy on refresh.", "",
             "`repair_term_display` creates paired verified backups, recovers source names, "
             "capitalizes displays and keys, preserves original IDs/codes/non-term fields, "
-            "refreshes search and verifies all 25 managed tables. It fails explicitly when a "
+            "refreshes search and verifies all 32 managed tables. It fails explicitly when a "
             "NULL coding name lacks an explicit source-backed recovery; it does not fabricate a name.", "",
             "SQLite INSERT/UPDATE triggers register deterministic UDFs through connect_sqlite/"
             "migrate_sqlite; writes using a bare connection fail if functions are missing. "
@@ -245,7 +263,7 @@ def main():
             "`repair_term_tables` takes verified backups and repairs both engines in place "
             "preserving genuine row IDs, scores, policies, code fields and raw provenance; "
             "only approved prose-removal IDs change row counts. "
-            "It verifies all 23 managed row hashes before completing and updates build provenance. "
+            "It verifies all 32 managed row hashes before completing and updates build provenance. "
             "Runner, Explorer 2/3 and the site-query notebook include the contract and a read-only "
             "key validator. Notebook regeneration creates backups before rewriting.", "",
         ]
@@ -256,9 +274,10 @@ def main():
             "terms. The 188 page-term targets include 16 without a defensible mapping. "
             "No original entity_codes.code or page_icdo_codes assignment is changed. "
             "TermNormUS collisions are not used to discard distinct spelling labels.", "",
-            "`Library/recovered_terms.json` is the persistent reviewed extraction manifest. "
+            "`Library/recovered_terms.json` is the historical reviewed extraction fixture. "
             "It contains original evidence and frozen code-term reference rows; full refresh validates "
-            "its reference hashes before replacement and re-applies it after entity extraction. "
+            "its reference hashes during the original migration. Version 11 never replays it; "
+            "persisted curated evidence is adapted once to general observations and review history. "
             "Review status, suggested qualifier and review notes are retained and re-linked to new IDs. "
             "New proposals are not used as positive source-code mention evidence. "
             "Do not classify an exact match as a confirmed patient diagnosis or registry reportability.", "",
@@ -417,7 +436,13 @@ def main():
             "-- Existing databases must be upgraded with local_pipeline.migrate_sqlite.\n" +
             (root / "schema.sql").read_text(encoding="utf-8") + "\n" +
             (root / "schema_enrichment.sql").read_text(encoding="utf-8") + "\n" +
-            term_recovery.view_sql(), encoding="utf-8")
+            (root / "schema_term_pipeline.sql").read_text(encoding="utf-8") + "\n" +
+            term_recovery.view_sql() + "\n" +
+            "".join(f"DROP VIEW IF EXISTS {v};\n" for v in (
+                "v_entity_terms", "v_entity_term_provenance", "v_entity_term_code_matches",
+                "v_page_code_terms")) +
+            term_pipeline.view_sql() + ";\n",
+            encoding="utf-8")
 
 
 if __name__ == "__main__":

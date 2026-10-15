@@ -48,6 +48,22 @@ _FOOTNOTE_TAIL = re.compile(r"[\s\u2020\u2021\u00a7\u00b6*.;:]+$")
 _BULLET = re.compile(r"^\s*(?:\*\s+|\u2022\s*)")
 
 
+def is_standalone_placeholder(value: str | None) -> bool:
+    """Qualifiers containing these words are not standalone placeholders."""
+    text = clean_term_ending(value)
+    if not text:
+        return False
+    # Normalize punctuation and whitespace only for this exact-value check.
+    # Embedded qualifier language (for example, "Tumor (classification not
+    # applicable)") remains a legitimate term.
+    normalized = re.sub(r"[\W_]+", " ", text.casefold()).strip()
+    return normalized in {
+        "not applicable", "not applicable n a", "not applicable na",
+        "none", "n a", "na", "tbd", "to be edited", "to be added",
+        "classification in progress", "awaiting icd o", "data not available",
+    }
+
+
 @lru_cache(maxsize=32768)
 def clean_term_ending(value: str | None) -> str | None:
     """Remove term-list decoration, not scientific signs or numeric scripts."""

@@ -134,6 +134,19 @@ preserved; conflicts fail rather than overwrite decisions.
 Run these commands, or Runner Step 5 then Step 7, **without login/discovery/crawl
 cells** when using local data only.
 
+### Observation-first terminology
+
+Eligible page titles are retained as observations even when no source code is
+present. Edition-specific lookups are stored separately from source coding:
+`term_lookup_evaluations` records each outcome and reference revision,
+`term_code_candidates` records proposed mappings and workbook provenance, and
+`term_review_decisions` is append-only. Source and proposed code/term flags in
+`v_page_code_terms` are independent. Legacy curation is adapted once and tracked
+in `term_pipeline_migrations`; the steady refresh does not replay its manifest.
+Placeholder cleanup uses one exact standalone-term predicate, so
+“Not applicable” variants are rejected while meaningful qualifier phrases
+remain intact.
+
 [validate_local.py](validate_local.py) runs read-only live hashes/search/
 normalization checks and the site-query notebook on both backends.
 Its saved-body and six-code spot tests verify content, not just index readiness;
@@ -161,7 +174,7 @@ code index are retained. See the tuning section of the completion report.
 | 4 | Crawl chosen book(s): `BOOKS`, `TOC_ONLY`, `LIMIT`, `NO_IMAGES`, `RESCRAPE`. Resumable | `bluebooks_crawl.py` |
 | 5 | Back up; populate reference/entity/evidence tables and whole-page documents; rebuild FTS5 | `bluebooks_local.refresh_local` |
 | 6 | Inspect the SQLite DB: row counts, per-book status, sample pages + URLs | — |
-| 7 | *(Optional)* Provision complete schema; deploy `dbo.Clean`; back up and mirror 23 managed tables; wait for section/title/whole-page FULLTEXT | `bluebooks_local`, `00_dbo_Clean.sql`, `pyodbc` |
+| 7 | *(Optional)* Provision complete schema; deploy `dbo.Clean`; back up and mirror 32 managed tables; wait for section/title/whole-page FULLTEXT | `bluebooks_local`, `00_dbo_Clean.sql`, `pyodbc` |
 | 8 | Quick search sanity check | `search.py` |
 
 ## Tips
@@ -194,7 +207,7 @@ Use `bluebooks_local.repair_term_display(Path("bluebooks.db"))` for this
 backed-up, row-preserving repair and 25-table verification.
 
 Use `bluebooks_local.repair_term_tables(Path("bluebooks.db"))` for the existing
-two-database snapshot: verified backups precede the in-place repair, and all 23
+two-database snapshot: verified backups precede the in-place repair, and all 32
 managed tables are checked for row-value parity. Future refreshes/mirrors retain
 the new fields automatically. Use `connect_sqlite` for writes so required UDFs
 are registered. Each active notebook documents the rules, includes read-only
@@ -285,14 +298,55 @@ The approved extraction is persisted in `Library/recovered_terms.json`.
   them by source citations and retains unmapped terms through LEFT JOINs.
 - Never replace `entity_codes.code` or `page_icdo_codes` with these suggested codes.
   New recovered names are not treated as positive source-code mention evidence.
-- Full refresh validates the manifest/reference hashes, re-applies recovery and
-  preserves review status, qualifiers and notes while re-linking regenerated IDs.
-  Both new tables are mirrored and hash-verified.
+- Version 11 imports the persisted curated evidence once into the general
+  observation pipeline. Full refresh never loads or replays the manifest.
+  Legacy tables remain compatibility/audit evidence; reviewed and unreproducible
+  historical observations survive refresh.
 
 Initial approved plan per engine: 171 new term rows, 17 existing targets reused,
 215 provenance links and 398 candidate mappings; 16 of 188 page-term targets have
 no defensible match. Recovered labels receive indexed TermUS/TermNormUS normally.
 Use `term_recovery.dry_run(Path("bluebooks.db"))` for read-only planning;
 `term_recovery.apply_recovery(Path("bluebooks.db"))` takes verified paired backups
-before applying. These are vocabulary proposals, not diagnoses in actual patients
+before applying a historical migration (not a normal refresh). These are vocabulary proposals, not diagnoses in actual patients
 or assertions of registry reportability. See `DATA_DICTIONARY.md`.
+
+## Observation-first terminology (version 11)
+
+`term_pipeline` shares extraction, normalization, independent official-reference
+matching and persistence between both database workflows and notebooks.
+Titles, coding labels and related labels are observed before matching. Saved
+prose contributes longest boundary-aware **known official phrases** only; unknown
+prose discovery is not claimed. Sentence-local negation, differential, historical
+and incidental context requires review, not a positive page diagnosis.
+Standalone placeholders are rejected centrally; meaningful qualifiers remain.
+
+Official morphology inputs are the local `ICD-O-3.2_final_update09102020.xlsx`
+(`ICD-O-3.2 Morphology`) and
+`..\BBNotebook\Library\CPC_ICDO4\Updates_2026_09\ICD-O-4.xlsx` (`Morphology`).
+`term_reference_rows` stores file/hash/sheet/actual row identity. CPC compilation
+and site workbooks remain auxiliary references, not substitutes for either edition.
+No cloud model, Internet lookup or external corpus upload occurs.
+
+- `page_term_mentions`: stable observation key, locator, BB text, context/tier,
+  source hash and current/historical marker. `icdo_code` is printed evidence only.
+- `term_lookup_evaluations`: observation-linked outcomes for each edition/revision.
+- `term_code_candidates`: official labels/codes, explanation, conditions and
+  supporting rows, never overwriting printed assignments.
+- `term_review_decisions`: append-only scoped review events. Use
+  `term_pipeline.decide(connection, target_key, scope, outcome, reason,
+  evidence_hash, reviewer=...)` inside a backed-up write transaction. Changed
+  evidence reopens review; page/edition-specific rejection does not suppress other pages/editions.
+- `v_term_candidate_evidence`: all outcomes, rejected candidates and historical
+  evidence. `v_page_code_terms`: normal ICDO32/ICDO4 proposal columns, independent
+  `is_proposed_code` / `is_proposed_term`, BB `TermUS`, official `candidateTermUS`.
+  Display evidence is consolidated without multiplying citation links.
+- `term_saved_sections`: source/parser-hash-invalidated DOM cache, shared by
+  refresh and spreadsheet extraction. It is not authoritative over saved HTML.
+
+Site hints require a unique, positive, unconditioned ICD-O-3.2 relationship.
+Contained broader labels are review-only suggestions; no code is inherited from
+parent pages or split terms. Editable aliases and book/chapter metadata remain.
+The old recovery module/manifest still have alias, compatibility and regression
+dependencies, so they are retained rather than falsely declared archived.
+Subtitle work remains deferred in `issues/subtitle-capture-audit.md`.

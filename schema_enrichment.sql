@@ -121,7 +121,9 @@ CREATE TABLE IF NOT EXISTS page_term_mentions (
  confidence_score DECIMAL(5,2) NOT NULL, snippet TEXT,
  review_status TEXT NOT NULL DEFAULT 'accepted',
  reviewed_by TEXT NOT NULL DEFAULT 'rule',
- TermUS TEXT, TermNormUS TEXT
+ TermUS TEXT, TermNormUS TEXT,
+ observation_key TEXT, source_locator TEXT, term_origin TEXT,
+ context_class TEXT, evidence_hash TEXT, extraction_tier TEXT, is_current INTEGER
 );
 CREATE TABLE IF NOT EXISTS page_site_hints (
  hint_id INTEGER PRIMARY KEY, page_id INTEGER NOT NULL REFERENCES pages(page_id),

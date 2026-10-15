@@ -2,12 +2,13 @@
 
 Updated: 2026-10-14
 
-Status: planning only; implementation not authorized.
+Status: authorized implementation; staged extraction/refresh validation passed,
+paired database deployment and final cross-engine acceptance in progress.
 
 This is the maintained plan for the crawler and companion notebook repository,
 and for both SQLite and SQL Server databases. Update it as implementation
-decisions, validation results, or scope change. No migration or cleanup has been
-performed as part of writing this plan.
+decisions, validation results, or scope change. The maintainer authorized
+autonomous implementation after the verified backup/baseline gate.
 
 ## Change summary
 
@@ -66,7 +67,57 @@ Before extensive implementation:
 Git tags and database backups serve different purposes; neither replaces the
 other. Do not push or redistribute local reference files as part of this gate.
 
-Current gate status: not executed; this turn performs planning only.
+Gate completed for the crawler: baseline commit `f8d2376`, annotated tag
+`pre-term-harvesting-refactor-2026-10-14`. Verified initial backups:
+`local_backups\bluebooks-20261014T204136458462Z.db` and
+`BlueBooks-local-parity-20261014T204136458462Z.bak`.
+Fresh verified deployment backups: `bluebooks-20261014T213752403663Z.db` and
+`BlueBooks-local-parity-20261014T213752403663Z.bak`.
+Companion worktree modifications remain uncommitted by explicit instruction;
+unrelated `2.0` and `BB Tables.sql` are untouched. No commit/push is performed
+by implementation; no remote is configured.
+
+## Implementation decisions and staged evidence
+
+- `schema_term_pipeline.sql` specifies integer primary/FK IDs and SHA256 stable
+  keys; SQL Server uses `NVARCHAR(64)` for hashes/identities and bounded edition,
+  matcher, outcome and scope fields. Candidate evidence is JSON of actual
+  file/hash/sheet/row/code/label records, without synthetic row numbers.
+- `page_term_mentions` is reused for general observations. Old code-first
+  lexicon records are retained inactive as `prior_lexicon`. Persisted curated
+  records are adapted once as `legacy_import`; the legacy module/manifest remain
+  because alias helpers, compatibility surfaces and regression fixtures still
+  depend on them. No normal refresh manifest replay remains.
+- Generic tables preserve revisions and scoped append-only review history.
+  SQL Server's nullable observation-key uniqueness uses a filtered unique index,
+  matching SQLite's multiple-NULL compatibility semantics during migration.
+- Saved-section caching is invalidated by source SHA256 and parser revision;
+  both refresh and spreadsheet extraction use this shared DOM result.
+- Ordinal tiers distinguish structured observations, supported prose spans and
+  curated interpretations; mapping tiers distinguish official labels/synonyms,
+  lossy normalization and contained broader phrases requiring review.
+- Both editions use official references independently: 2,895 ICD-O-3.2 rows and
+  4,720 September ICD-O-4 rows. Compilation/site workbooks remain auxiliary.
+- All 2,980 eligible entity titles are observed, including pages 4941 and 5029.
+  Gynandroblastoma has official candidates `8632/1` and `86320/1`.
+- Baseline comparison preserves every field of 6,497 retained source coding
+  rows and 5,385 retained related rows; removes only the three coding and one
+  related standalone placeholders, and adds eight source-backed related labels.
+  Both historical recovery tables (215 provenance links, 398 mappings) and
+  editable book metadata/aliases are unchanged.
+- Clean-baseline refresh and a second refresh with `load_manifest` forced to
+  raise succeeded. Observation/reference/evaluation/candidate/review and
+  canonical source-table hashes were identical on the second refresh.
+  Recorded refresh time: 124.85 seconds, including validation/digest work.
+- Staged counts: 47,306 current observations (117,559 including inactive history),
+  94,953 evaluations, 69,670 candidates, 6,019 safe site hints, 26,978 evidence
+  rollups. No prior explicit review events existed; migration therefore creates
+  no invented review decisions. Tests exercise approval/rejection histories.
+- SQLite representative queries use covering observation/evaluation/candidate/
+  review indexes; representative page-view query measured 1.79 seconds.
+  Final SQL Server plans/timings and complete deployment parity remain pending.
+- Subtitle capture is still deferred. Archive retirement is dependency-gated:
+  no file with active alias/compatibility/regression responsibilities is archived.
 
 ## 3. One shared pipeline
 

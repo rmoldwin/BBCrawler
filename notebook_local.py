@@ -41,7 +41,7 @@ those keys keep the legacy Clean rules but no longer retain footnote decoration.
 For an existing snapshot, `local.repair_term_tables(SQLITE_PATH)` makes fresh
 SQLite and SQL Server COPY_ONLY backups, repairs the five tables in place,
 preserves genuine IDs/codes/provenance, removes only saved-HTML-confirmed
-misplaced prose approved by the maintainer, and verifies all 23 managed row hashes.
+misplaced prose approved by the maintainer, and verifies all 32 managed row hashes.
 Full Runner/Explorer refreshes and mirrors also maintain the new columns.
 Notebook regeneration backs up every notebook before writing it.
 
@@ -74,7 +74,7 @@ identifier terms, reference terms/keys, recovered names and proposed official na
 Original prose and workbook code-term evidence JSON remain verbatim.
 Absent optional workbook preferred terms remain NULL; none are invented.
 Use `local.repair_term_display(SQLITE_PATH)` for the backed-up display repair;
-Clean2 itself is unchanged. Both engines and all 25 managed tables are verified.
+Clean2 itself is unchanged. Both engines and all 32 managed tables are verified.
 """
 TERM_CHECK = """# Read-only checks: use the existing local database, no crawl or login.
 from contextlib import closing
@@ -169,9 +169,18 @@ only; not code validity, preferred-term, synonym or registry status):
 A row with more than one origin combines distinct values alphabetically with
 `; ` (for example `coding; contextual`). Filter with `LIKE` or split on `; `.
 
-The frozen recovery manifest is `Library/recovered_terms.json` in the crawler
-project. Full refresh re-applies it and preserves review status, qualifiers and
-notes; mirroring includes both new tables. Initial recovery: 171 new term rows,
+The frozen recovery manifest is an audit/test fixture, not a refresh stage.
+Version 11 migrates persisted curated evidence once into general observations,
+evaluations, candidates and append-only review history; a migration marker
+prevents replay during steady refresh. Eligible titles are observed
+independently of source codes. Both official editions are evaluated
+independently; September 2026 is the ICD-O-4 reference. Standalone placeholders
+are rejected centrally, without rejecting legitimate qualifier text such as
+“classification not applicable”. `v_term_candidate_evidence` retains snippets,
+context, tiers, row-level reference evidence, rejections and historical
+revisions. `v_page_code_terms` exposes source vs candidate rows,
+`is_proposed_code`, `is_proposed_term` and per-edition `lookup_outcome`.
+Initial historical recovery: 171 new term rows,
 17 existing page-linked targets reused, 215 provenance links and 398 code matches
 per database; 16 of 188 targets have no proposed match. Backups precede migration.
 """
@@ -185,7 +194,7 @@ with closing(local.connect_sqlite(local.CRAWLER / "bluebooks.db", readonly=True)
     recovery_rows = recovery_db.execute(
         "SELECT page_id,term,source_code,suggested_code,edition,official_term,"
         "match_type,suggested_qualifier,review_status "
-        "FROM v_entity_term_code_matches WHERE source_kind='AI_recovered_prose' "
+        "FROM v_legacy_entity_term_code_matches WHERE source_kind='AI_recovered_prose' "
         "ORDER BY page_id,term,edition,candidate_order"
     ).fetchall()
     print("Recovered terms and all candidate matches:", recovery_rows[:30])
@@ -196,6 +205,30 @@ with closing(local.connect_sqlite(local.CRAWLER / "bluebooks.db", readonly=True)
         "FROM v_page_code_terms ORDER BY page_id,TermUS,code_edition,morphology_code LIMIT 30"
     ).fetchall()
     print("Distinct page code-term pairs:", page_code_terms)
+    title_coverage = recovery_db.execute(
+        "SELECT COUNT(*) FROM entity_pages e WHERE NOT EXISTS("
+        "SELECT 1 FROM page_term_mentions m WHERE m.page_id=e.page_id "
+        "AND m.term_source='page_title' AND m.term_origin='source' AND m.is_current=1)"
+    ).fetchone()[0]
+    print("Eligible pages missing source title observations:", title_coverage)
+    print("Page 4941 Gynandroblastoma proposals:", recovery_db.execute(
+        "SELECT code_edition,ICDO32,ICDO4,is_proposed_code,is_proposed_term,"
+        "lookup_outcome,review_status FROM v_page_code_terms "
+        "WHERE page_id=4941 AND TermUS='Gynandroblastoma' "
+        "ORDER BY code_edition").fetchall())
+    print("Both-edition unmatched/proposal outcomes:", recovery_db.execute(
+        "SELECT code_edition,lookup_outcome,COUNT(*) FROM v_page_code_terms "
+        "GROUP BY code_edition,lookup_outcome").fetchall())
+    print("Context and official evidence:", recovery_db.execute(
+        "SELECT page_id,TermUS,edition,context_class,outcome,code,reference_evidence "
+        "FROM v_term_candidate_evidence WHERE page_id=4941 AND is_current=1").fetchall())
+    print("Scoped review history:", recovery_db.execute(
+        "SELECT scope,outcome,reason,reviewer,decided_at FROM term_review_decisions "
+        "ORDER BY decision_id DESC LIMIT 10").fetchall())
+# Review writes are opt-in after paired backups:
+# import term_pipeline
+# term_pipeline.decide(write_connection, candidate_key, "candidate", "rejected",
+#                      "Page-specific reason", evidence_hash, reviewer="human")
 """
 
 
